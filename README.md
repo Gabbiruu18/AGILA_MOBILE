@@ -1,6 +1,8 @@
 # project_agila
 
-AGILA Flutter project.
+AGILA Mobile App Flutter project.
+
+namo solito
 
 ## Getting Started
 
