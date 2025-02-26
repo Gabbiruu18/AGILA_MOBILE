@@ -145,7 +145,7 @@ By using the AI-Driven CCTV Attendance Monitoring System, you acknowledge that y
                   ),
                 ),
                 child: Text(
-                  "Close",
+                  "Proceed",
                   style: GoogleFonts.poppins(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,
