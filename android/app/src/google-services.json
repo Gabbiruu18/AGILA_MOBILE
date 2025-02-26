@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "927545616990",
+    "project_id": "agila-c10a4",
+    "storage_bucket": "agila-c10a4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:927545616990:android:2e3a4ea4bcfb95f00962cf",
+        "android_client_info": {
+          "package_name": "com.example.project_agila"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
