@@ -76,7 +76,6 @@ class LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               if (_isBiometricAvailable) _buildBiometricButtons(),
               const SizedBox(height: 16),
-              _buildSignupLink(),
             ],
           ),
         ),
@@ -146,21 +145,6 @@ class LoginScreenState extends State<LoginScreen> {
           onPressed: () => BiometricUtil.authenticateWithFingerprint(context),
         ),
       ],
-    );
-  }
-
-  Widget _buildSignupLink() {
-    return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, '/signup'),
-      child: RichText(
-        text: TextSpan(
-          text: 'No Account? ',
-          style: GoogleFonts.poppins(fontSize: 14, color: Colors.black),
-          children: [
-            TextSpan(text: 'Click Here', style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFFFBB43C))),
-          ],
-        ),
-      ),
     );
   }
 }

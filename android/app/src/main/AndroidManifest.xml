@@ -3,7 +3,7 @@
 
     <!-- Specify SDK Versions -->
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
-
+    <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE" />
     <uses-feature android:name="android.hardware.vulkan.level" android:required="false"/>
     <uses-feature
