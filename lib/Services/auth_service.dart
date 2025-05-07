@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../Screens/UI_Screen/bottom_nav.dart';
 import 'database_service.dart';
 import 'package:project_agila/Utils/biometric_util.dart';
 
@@ -9,7 +11,6 @@ class AuthServices {
     try {
       debugPrint("Attempting login for: $email");
 
-      // Step 1: Try signing in
       UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
@@ -19,12 +20,11 @@ class AuthServices {
       if (user == null) throw FirebaseAuthException(code: 'no-user', message: 'User is null');
 
       final uid = user.uid;
-      final roles = ['student', 'faculty', 'program_head', 'academic_head'];
+      final roles = ['student', 'faculty', 'teacher', 'program_head', 'academic_head'];
       String? role;
       bool faceRegistered = false;
       Map<String, dynamic>? userData;
 
-      // Step 2: Look for user document
       for (final r in roles) {
         final doc = await FirebaseFirestore.instance
             .collection('users')
@@ -34,7 +34,6 @@ class AuthServices {
             .get();
 
         if (doc.exists) {
-          debugPrint("✅ Found user in role: $r");
           role = r;
           userData = doc.data();
           faceRegistered = userData?['faceRegistered'] ?? false;
@@ -42,9 +41,7 @@ class AuthServices {
         }
       }
 
-      // Step 3: If not found in any role
       if (role == null || userData == null) {
-        debugPrint("❌ Firestore user document not found for UID: $uid");
         await FirebaseAuth.instance.signOut();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Login failed: No Firestore data found for this user.")),
@@ -52,54 +49,58 @@ class AuthServices {
         return;
       }
 
-      // Step 4: Welcome dialog or facial registration
-      if (faceRegistered) {
-        debugPrint("✅ Face already registered. Showing welcome dialog.");
-
-        ScaffoldMessenger.of(context).showSnackBar( // Show success *before* opening dialog
-          SnackBar(content: Text("Welcome, ${user.email}! Login Successful")),
-        );
-
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (context) => AlertDialog(
-            title: const Text("Welcome!"),
-            content: Text("Welcome, ${userData?['firstName']} ${userData?['lastName']}!"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text("OK"),
-              ),
-            ],
+      // ✅ Facial registration check
+      // ✅ Facial registration check
+      if (!faceRegistered) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MainLayout(
+              role: role!,
+              name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
+              uid: uid,
+            ),
           ),
         );
-      } else {
-        debugPrint("🟡 Face not registered. Redirecting to facial registration.");
-        Navigator.pushReplacementNamed(context, '/facial-registration', arguments: {
-          'uid': uid,
-          'role': role,
-          'name': '${userData['firstName']} ${userData['lastName']}',
-        });
-
-        // Only show snackbar here
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("Welcome, ${user.email}! Login Successful")),
         );
+        return;
       }
 
-      // Step 5: Fingerprint (safe zone)
-      try {
-        bool isRegistered = await DatabaseService.isFingerprintRegistered(uid);
-        if (!isRegistered) {
-          bool registerFingerprint = await _showRegisterFingerprintDialog(context);
-          if (registerFingerprint) {
-            await DatabaseService.saveFingerprintRegistration(uid);
+
+      final prefs = await SharedPreferences.getInstance();
+      if (!prefs.containsKey('userPIN')) {
+        await _promptPinSetup(context);
+      }
+
+// ✅ Prompt for fingerprint registration
+      final isFingerprintRegistered = prefs.getBool('fingerprintRegistered') ?? false;
+      if (!isFingerprintRegistered) {
+        final enableFingerprint = await _showRegisterFingerprintDialog(context);
+        if (enableFingerprint) {
+          final authenticated = await BiometricUtil.authenticateWithFingerprint(context);
+          if (authenticated) {
+            await prefs.setBool('fingerprintRegistered', true);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Fingerprint not saved. Setup skipped.")),
+            );
           }
         }
-      } catch (fingerprintError) {
-        debugPrint("⚠️ Fingerprint setup error: $fingerprintError");
       }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MainLayout(
+            role: role!,
+            name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
+            uid: uid,
+          ),
+        ),
+      );
+
 
     } catch (e) {
       if (e is FirebaseAuthException) {
@@ -108,12 +109,12 @@ class AuthServices {
         debugPrint("Unexpected login error: $e");
       }
 
-      // Final catch for actual failed login
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Login Failed: Incorrect ID or Password")),
       );
     }
   }
+
 
 
   static Future<void> loginWithFingerprint(BuildContext context) async {
@@ -141,6 +142,8 @@ class AuthServices {
       );
     }
   }
+
+
 
   static Future<void> _showPasswordInputDialog(BuildContext context, String email) async {
     TextEditingController passwordController = TextEditingController();
@@ -171,6 +174,50 @@ class AuthServices {
       ),
     );
   }
+
+  static Future<void> _promptPinSetup(BuildContext context) async {
+    TextEditingController pinController = TextEditingController();
+    bool isValid = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: const Text("Set 6-digit PIN"),
+        content: TextField(
+          controller: pinController,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          obscureText: true,
+          decoration: const InputDecoration(hintText: "••••••"),
+          onChanged: (val) {
+            isValid = val.length == 6;
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              if (pinController.text.trim().length == 6) {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.setString('userPIN', pinController.text.trim());
+                Navigator.pop(context);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("PIN must be 6 digits.")),
+                );
+              }
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
 
   static Future<bool> _showRegisterFingerprintDialog(BuildContext context) async {
     return await showDialog(

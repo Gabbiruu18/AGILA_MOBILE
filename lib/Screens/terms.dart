@@ -1,5 +1,7 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TermsDialog extends StatefulWidget {
   const TermsDialog({super.key});
@@ -17,66 +19,77 @@ class TermsDialogState extends State<TermsDialog> {
   void initState() {
     super.initState();
     _scrollController.addListener(_checkIfScrolledToEnd);
+    _loadInitialState();
   }
 
   void _checkIfScrolledToEnd() {
-    final double maxScroll = _scrollController.position.maxScrollExtent;
-    final double currentScroll = _scrollController.position.pixels;
-
-    if (currentScroll >= maxScroll - 20) { //max scroll
-      if (!_isScrolledToEnd) {
-        setState(() {
-          _isScrolledToEnd = true;
-        });
-      }
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.position.pixels;
+    if (currentScroll >= maxScroll - 20) {
+      setState(() {
+        _isScrolledToEnd = true;
+      });
     }
   }
 
-  void _handleBackAction() {
-    if (!_isChecked) {
-      // If terms are not accepted, mag coclose yung signup and terms then direct login screen
-      Navigator.pop(context); // Close Terms
-      Navigator.pop(context); // Close Signup
-    } else {
-      Navigator.pop(context); // Close only Terms
-    }
+  Future<void> _loadInitialState() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isChecked = prefs.getBool('termsAccepted') ?? false;
+    });
+  }
+
+  Future<void> _setAcceptance(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('termsAccepted', value);
+    setState(() {
+      _isChecked = value;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
       onWillPop: () async {
-        _handleBackAction();
-        return false;
+        // Block dialog from closing if not accepted
+        return _isChecked;
       },
-      child: Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-        child: Container(
-          height: 500, //height
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            children: [
-              // Title
-              Text(
-                "Terms and Conditions",
-                style: GoogleFonts.poppins(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 10),
+      child: Stack(
+        children: [
+          // 🌀 Background blur
+          BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(color: Colors.black.withOpacity(0.1)),
+          ),
 
-              // Scrollable Terms
-              Expanded(
-                child: Scrollbar(
-                  controller: _scrollController,
-                  child: SingleChildScrollView(
-                    controller: _scrollController,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          '''
+          // 📄 Dialog
+          Center(
+            child: Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
+              child: Container(
+                height: 500,
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    Text(
+                      "Terms and Conditions",
+                      style: GoogleFonts.poppins(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+
+                    Expanded(
+                      child: Scrollbar(
+                        controller: _scrollController,
+                        child: SingleChildScrollView(
+                          controller: _scrollController,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '''
 1. Introduction
 Welcome to the AI-Driven General Identification and Logging Attendance. By using this system, you agree to the following terms and conditions. Please read them carefully before proceeding.
 
@@ -96,66 +109,67 @@ This system utilizes AI-powered facial recognition and CCTV technology to automa
 
 5. Acceptance of Terms
 By using the AI-Driven CCTV Attendance Monitoring System, you acknowledge that you have read, understood, and agreed to these terms and conditions.
-                          ''',
-                          style: GoogleFonts.poppins(fontSize: 14),
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Checkbox ng terms
-                        Row(
-                          children: [
-                            Checkbox(
-                              value: _isChecked,
-                              activeColor: const Color(0xFFFBB43C),
-                              onChanged: _isScrolledToEnd
-                                  ? (value) {
-                                setState(() {
-                                  _isChecked = value!;
-                                });
-                              }
-                                  : null,
-                            ),
-                            Expanded(
-                              child: Text(
-                                "I accept the terms and conditions",
-                                style: GoogleFonts.poppins(
-                                  fontSize: 14,
-                                  color: Colors.black,
-                                ),
+                                ''',
+                                style: GoogleFonts.poppins(fontSize: 14),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 20),
+                              Row(
+                                children: [
+                                  Checkbox(
+                                    value: _isChecked,
+                                    activeColor: const Color(0xFF0058CE),
+                                    onChanged: _isScrolledToEnd
+                                        ? (val) {
+                                      if (val != null) {
+                                        _setAcceptance(val);
+                                      }
+                                    }
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      "I accept the terms and conditions",
+                                      style: GoogleFonts.poppins(fontSize: 14),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+
+                    const SizedBox(height: 10),
+
+                    // Proceed only if accepted
+                    ElevatedButton(
+                      onPressed: _isChecked
+                          ? () => Navigator.pop(context)
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                        _isChecked ? const Color(0xFF0058CE) : Colors.grey,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: Text(
+                        "Proceed",
+                        style: GoogleFonts.poppins(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
-              const SizedBox(height: 10),
-
-              // Close button
-              ElevatedButton(
-                onPressed: _isChecked ? () => Navigator.pop(context) : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _isChecked ? Colors.blue : Colors.grey,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Text(
-                  "Proceed",
-                  style: GoogleFonts.poppins(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

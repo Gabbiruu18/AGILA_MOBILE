@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OpeningScreen extends StatefulWidget {
   const OpeningScreen({super.key});
@@ -28,9 +29,17 @@ class OpeningScreenState extends State<OpeningScreen>
 
     _controller.forward();
 
-    // Navigate to the next screen after a delay
-    Future.delayed(const Duration(seconds: 5), () {
-      Navigator.pushReplacementNamed(context, '/'); //navigate papuntang login screen
+    // Navigate to the correct screen after a delay
+    Future.delayed(const Duration(seconds: 5), () async {
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('rememberMe') ?? false;
+
+      if (!mounted) return;
+
+      Navigator.pushReplacementNamed(
+        context,
+        rememberMe ? '/quick-login' : '/',
+      );
     });
   }
 
@@ -43,7 +52,7 @@ class OpeningScreenState extends State<OpeningScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),//background
+      backgroundColor: const Color(0xFFD9D9D9),
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,
@@ -61,11 +70,11 @@ class OpeningScreenState extends State<OpeningScreen>
                 ],
               ),
               children: [
-                TextSpan(
+                const TextSpan(
                   text: 'A',
                   style: TextStyle(color: Color(0xFFFFA000)), // Orange
                 ),
-                TextSpan(
+                const TextSpan(
                   text: 'GILA',
                   style: TextStyle(color: Color(0xFF0058CE)), // Blue
                 ),

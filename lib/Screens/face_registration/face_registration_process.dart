@@ -62,14 +62,28 @@ class _FacialRegistrationProcessingScreen extends State<FacialRegistrationProces
             ),
             const SizedBox(height: 40),
             if (_isComplete)
-              ElevatedButton(
-                onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0058CE),
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: Text('Done', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18)),
+              Column(
+                children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF0058CE),
+                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Done', style: GoogleFonts.poppins(color: Colors.white, fontSize: 18)),
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pushNamed(context, '/face-recognition-tester'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFBB43C),
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    child: Text('Test Face Recognition', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16)),
+                  ),
+                ],
               )
           ],
         ),

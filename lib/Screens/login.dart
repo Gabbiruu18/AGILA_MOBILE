@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../Services/auth_service.dart';
-import '../Utils/biometric_util.dart';
+import 'terms.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,18 +15,39 @@ class LoginScreenState extends State<LoginScreen> {
   final TextEditingController idController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isBiometricAvailable = false;
+  bool _termsAccepted = false;
+  bool _rememberMe = false;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometricAvailability();
+    _loadInitialState();
   }
 
-  Future<void> _checkBiometricAvailability() async {
-    bool available = await BiometricUtil.checkBiometricAvailability();
+  Future<void> _loadInitialState() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      _isBiometricAvailable = available;
+      _termsAccepted = prefs.getBool('termsAccepted') ?? false;
+    });
+
+    if (!_termsAccepted) {
+      Future.delayed(Duration.zero, () {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => const TermsDialog(),
+        );
+      });
+    }
+  }
+
+  Future<void> _toggleTerms(bool? value) async {
+    if (value == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('termsAccepted', value);
+    setState(() {
+      _termsAccepted = value;
     });
   }
 
@@ -33,52 +55,87 @@ class LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFD9D9D9),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              RichText(
-                text: TextSpan(
-                  children: [
-                    TextSpan(
-                      text: 'A',
-                      style: GoogleFonts.poppins(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFFFBB43C),
-                      ),
+      body: Stack(
+        children: [
+          Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      children: [
+                        TextSpan(
+                          text: 'A',
+                          style: GoogleFonts.poppins(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFFBB43C),
+                          ),
+                        ),
+                        TextSpan(
+                          text: 'GILA',
+                          style: GoogleFonts.poppins(
+                            fontSize: 48,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFF0058CE),
+                          ),
+                        ),
+                      ],
                     ),
-                    TextSpan(
-                      text: 'GILA',
-                      style: GoogleFonts.poppins(
-                        fontSize: 48,
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0058CE),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'AI-Driven General Identification and Logging Attendance',
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0045A2)),
+                  ),
+                  const SizedBox(height: 32),
+                  _buildTextField("School Email", idController, "example.000000@caloocan.sti.edu.ph"),
+                  const SizedBox(height: 16),
+                  _buildTextField("Password", passwordController, "", isPassword: true),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _rememberMe,
+                        activeColor: const Color(0xFF0058CE),
+                        onChanged: (val) {
+                          setState(() {
+                            _rememberMe = val ?? false;
+                          });
+                        },
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(width: 4),
+                      Text("Remember Me", style: GoogleFonts.poppins(fontSize: 14)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  _buildLoginButton(),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Checkbox(
+                        value: _termsAccepted,
+                        activeColor: const Color(0xFF0058CE),
+                        onChanged: _toggleTerms,
+                      ),
+                      const SizedBox(width: 4),
+                      Text("I accept the terms and conditions", style: GoogleFonts.poppins(fontSize: 14)),
+                    ],
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                'AI-Driven General Identification and Logging Attendance',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0045A2)),
-              ),
-              const SizedBox(height: 32),
-              _buildTextField("Identification NO.", idController, ""),
-              const SizedBox(height: 16),
-              _buildTextField("Password", passwordController, "", isPassword: true),
-              const SizedBox(height: 24),
-              _buildLoginButton(),
-              const SizedBox(height: 16),
-              if (_isBiometricAvailable) _buildBiometricButtons(),
-              const SizedBox(height: 16),
-            ],
+            ),
           ),
-        ),
+          if (_isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.7),
+              child: const Center(child: CircularProgressIndicator(color: Color(0xFF0058CE))),
+            ),
+        ],
       ),
     );
   }
@@ -90,10 +147,11 @@ class LoginScreenState extends State<LoginScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
-        labelStyle: TextStyle(color: const Color(0x67001A3E)), // Label color
+        hintStyle: const TextStyle(color: Color(0xFFBFBFBF)),
+        labelStyle: const TextStyle(color: Color(0x67001A3E)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF0058CE), width: 2), // Blue border
+          borderSide: const BorderSide(color: Color(0xFF0058CE), width: 2),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -113,7 +171,6 @@ class LoginScreenState extends State<LoginScreen> {
     );
   }
 
-
   Widget _buildLoginButton() {
     return SizedBox(
       width: double.infinity,
@@ -123,28 +180,43 @@ class LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
-        onPressed: () => AuthServices.login(idController.text.trim(), passwordController.text.trim(), context),
-        child: Text('LOGIN', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
-      ),
-    );
-  }
+        onPressed: _isLoading
+            ? null
+            : () async {
+          FocusScope.of(context).unfocus();
+          if (!_termsAccepted) {
+            showDialog(
+              context: context,
+              barrierDismissible: false,
+              builder: (_) => const TermsDialog(),
+            );
+            return;
+          }
 
-  Widget _buildBiometricButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        IconButton(
-          icon: const Icon(Icons.face, size: 40, color: Color(0xFF0058CE)),
-          onPressed: () {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Face Login is still in development.")));
-          },
-        ),
-        const SizedBox(width: 20),
-        IconButton(
-          icon: const Icon(Icons.fingerprint, size: 40, color: Color(0xFF0058CE)),
-          onPressed: () => BiometricUtil.authenticateWithFingerprint(context),
-        ),
-      ],
+          setState(() {
+            _isLoading = true;
+          });
+
+          if (_rememberMe) {
+            final prefs = await SharedPreferences.getInstance();
+            await prefs.setBool('rememberMe', true);
+            await prefs.setString('rememberedEmail', idController.text.trim());
+          }
+
+          await AuthServices.login(
+            idController.text.trim(),
+            passwordController.text.trim(),
+            context,
+          );
+
+          setState(() {
+            _isLoading = false;
+          });
+        },
+        child: Text('LOGIN',
+            style: GoogleFonts.poppins(
+                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+      ),
     );
   }
 }
