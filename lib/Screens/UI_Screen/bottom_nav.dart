@@ -13,7 +13,7 @@ class MainLayout extends StatefulWidget {
     super.key,
     required this.role,
     required this.name,
-    required this.uid,
+    required this.uid, required bool faceRegistered,
   });
 
   @override
