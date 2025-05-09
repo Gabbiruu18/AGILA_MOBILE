@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../Screens/UI_Screen/bottom_nav.dart';
+import '../Screens/face_registration/face_registration.dart';
 import 'database_service.dart';
 import 'package:project_agila/Utils/biometric_util.dart';
 
@@ -20,11 +21,12 @@ class AuthServices {
       if (user == null) throw FirebaseAuthException(code: 'no-user', message: 'User is null');
 
       final uid = user.uid;
-      final roles = ['student', 'faculty', 'teacher', 'program_head', 'academic_head'];
+      final roles = ['student', 'teacher', 'program_head', 'academic_head'];
       String? role;
       bool faceRegistered = false;
       Map<String, dynamic>? userData;
 
+      // Fetch user data and role
       for (final r in roles) {
         final doc = await FirebaseFirestore.instance
             .collection('users')
@@ -36,45 +38,66 @@ class AuthServices {
         if (doc.exists) {
           role = r;
           userData = doc.data();
-          faceRegistered = userData?['faceRegistered'] ?? false;
+
+          // Check if faceRegistered field exists and is a boolean
+          if (userData?.containsKey('faceRegistered') == true) {
+            faceRegistered = userData?['faceRegistered'] ?? false;
+          } else {
+            // Handle missing faceRegistered field
+            debugPrint("Warning: faceRegistered field not found for user $uid");
+            faceRegistered = false;  // Default to false if field is missing
+          }
           break;
         }
       }
 
-      if (role == null || userData == null) {
-        await FirebaseAuth.instance.signOut();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Login failed: No Firestore data found for this user.")),
-        );
-        return;
+
+      if (userData == null) {
+        throw Exception("User data not found.");
       }
 
-      // ✅ Facial registration check
-      // ✅ Facial registration check
+      // Check face registration status
       if (!faceRegistered) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => MainLayout(
-              role: role!,
-              name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
-              uid: uid,
-            ),
+            builder: (_) => FacialRegistrationScreen(),
+            settings: RouteSettings(arguments: {
+              'uid': uid,
+              'name': '${userData['firstName'] ?? ''} ${userData['lastName'] ?? ''}',
+              'role': role,
+            }),
           ),
         );
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Welcome, ${user.email}! Login Successful")),
+          const SnackBar(content: Text("Facial registration required. Please complete registration.")),
         );
         return;
       }
 
 
+      // Navigate to MainLayout if face registration is complete
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MainLayout(
+            role: role!,
+            name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
+            uid: uid,
+            faceRegistered: true,
+          ),
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Welcome, ${user.email}! Login Successful")),
+      );
+
+      // Handle PIN and fingerprint setup
       final prefs = await SharedPreferences.getInstance();
       if (!prefs.containsKey('userPIN')) {
         await _promptPinSetup(context);
       }
 
-// ✅ Prompt for fingerprint registration
       final isFingerprintRegistered = prefs.getBool('fingerprintRegistered') ?? false;
       if (!isFingerprintRegistered) {
         final enableFingerprint = await _showRegisterFingerprintDialog(context);
@@ -90,18 +113,6 @@ class AuthServices {
         }
       }
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => MainLayout(
-            role: role!,
-            name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
-            uid: uid,
-          ),
-        ),
-      );
-
-
     } catch (e) {
       if (e is FirebaseAuthException) {
         debugPrint("FirebaseAuthException: ${e.code} | ${e.message}");
@@ -114,8 +125,6 @@ class AuthServices {
       );
     }
   }
-
-
 
   static Future<void> loginWithFingerprint(BuildContext context) async {
     try {
@@ -142,8 +151,6 @@ class AuthServices {
       );
     }
   }
-
-
 
   static Future<void> _showPasswordInputDialog(BuildContext context, String email) async {
     TextEditingController passwordController = TextEditingController();
@@ -177,7 +184,6 @@ class AuthServices {
 
   static Future<void> _promptPinSetup(BuildContext context) async {
     TextEditingController pinController = TextEditingController();
-    bool isValid = false;
 
     await showDialog(
       context: context,
@@ -190,9 +196,6 @@ class AuthServices {
           maxLength: 6,
           obscureText: true,
           decoration: const InputDecoration(hintText: "••••••"),
-          onChanged: (val) {
-            isValid = val.length == 6;
-          },
         ),
         actions: [
           TextButton(
@@ -201,9 +204,10 @@ class AuthServices {
           ),
           TextButton(
             onPressed: () async {
-              if (pinController.text.trim().length == 6) {
+              final pin = pinController.text.trim();
+              if (pin.length == 6) {
                 final prefs = await SharedPreferences.getInstance();
-                await prefs.setString('userPIN', pinController.text.trim());
+                await prefs.setString('userPIN', pin);
                 Navigator.pop(context);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -217,7 +221,6 @@ class AuthServices {
       ),
     );
   }
-
 
   static Future<bool> _showRegisterFingerprintDialog(BuildContext context) async {
     return await showDialog(
