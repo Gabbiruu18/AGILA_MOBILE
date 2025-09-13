@@ -16,7 +16,7 @@
 
     <application
         android:label="AGILA"
-        android:icon="@mipmap/eagle"
+        android:icon="@mipmap/logo_agila"
         android:allowBackup="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
@@ -40,13 +40,10 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
-        <!-- Flutter Plugin Registration -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- Legacy Storage Access for Android 10+ (Optional) -->
         <meta-data android:name="android:requestLegacyExternalStorage"
             android:value="true"/>
     </application>

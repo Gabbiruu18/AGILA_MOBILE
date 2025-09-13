@@ -4,11 +4,11 @@ import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:project_agila/Screens/Face Recognition/face_recognition_tester.dart';
-import 'package:project_agila/Screens/opening.dart';
-import 'package:project_agila/Screens/login.dart';
+import 'package:project_agila/Screens/MainScreens/opening.dart';
+import 'package:project_agila/Screens/MainScreens/login.dart';
 import 'package:project_agila/Screens/face_registration/face_registration.dart';
 import 'package:project_agila/Screens/face_registration/face_registration_process.dart';
-import 'package:project_agila/Screens/quick_login.dart';
+import 'package:project_agila/Screens/MainScreens/quick_login.dart';
 import 'package:project_agila/Screens/UI_Screen/home.dart';// <-- make sure this points to your QuickLoginScreen
 
 void main() async {
@@ -47,6 +47,7 @@ class MyApp extends StatelessWidget {
           return HomeScreen(
             role: args['role'],
             name: args['name'],
+            uid: args['uid'],
           );
         },
       },

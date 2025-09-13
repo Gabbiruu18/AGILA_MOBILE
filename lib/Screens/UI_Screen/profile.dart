@@ -1,7 +1,7 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:project_agila/Service_Modules/Profile/profile_controller.dart';
+import 'package:project_agila/Service_Modules/Profile/profile_UI.dart';
 
 class ProfileScreen extends StatefulWidget {
   final String role;
@@ -14,124 +14,139 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  Map<String, dynamic>? userData;
-  bool isLoading = true;
+  late final ProfileController controller;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    controller = ProfileController();
+    controller.addListener(_onChanged);
+    controller.init(role: widget.role, uid: widget.uid);
   }
 
-  Future<void> _loadUserData() async {
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(widget.role)
-        .collection('accounts')
-        .doc(widget.uid)
-        .get();
+  @override
+  void dispose() {
+    controller.removeListener(_onChanged);
+    controller.dispose();
+    super.dispose();
+  }
 
-    if (doc.exists) {
-      setState(() {
-        userData = doc.data();
-        isLoading = false;
-      });
-    }
+  void _onChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
-      body: SafeArea(
-        child: isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : Column(
-          children: [
-            const SizedBox(height: 24),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Text('Profile', style: GoogleFonts.poppins(fontSize: 24, color: Color(0xFF0045A2))),
-              ),
-            ),
-            const SizedBox(height: 16),
-            CircleAvatar(
-              radius: 100,
-              backgroundColor: Colors.grey[400],
-              child: const Icon(Icons.person, size: 60, color: Colors.white),
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: () {},
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFC88000),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              ),
-              child: Text('Attach', style: GoogleFonts.poppins(color: Colors.white)),
-            ),
-            const SizedBox(height: 20),
-            Container(
-              margin: const EdgeInsets.symmetric(horizontal: 24),
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                border: Border.all(color: const Color(0xFF0058CE), width: 2),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildField('Name', '${userData?['firstName']} ${userData?['lastName']}'),
-                  _buildField('Email', userData?['email'] ?? ''),
-                  _buildField('Section', userData?['section'] ?? '-'),
-                  _buildField('Course', userData?['course'] ?? '-'),
-                  _buildField('Year-Level', userData?['yearLevel'] ?? '-'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                if (context.mounted) {
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/',
-                        (route) => false,
-                  );
-                }
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF910015),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-              ),
-              child: Text('Logout', style: GoogleFonts.poppins(color: Colors.white)),
-            ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: () => Navigator.pushNamed(context, '/face-recognition-tester'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0246CA),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text('Test Face Recognition', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16)),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+    final isLoading = controller.isLoading;
+    final data = controller.profileData;
+    final roleRaw = controller.role;
 
-  Widget _buildField(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Text(
-        '$label: $value',
-        style: GoogleFonts.poppins(fontSize: 14),
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    final roleLabel = switch (roleRaw.toLowerCase()) {
+      'student' => 'Student',
+      'teacher' => 'Teacher',
+      'program_head' => 'Program Head',
+      'academic_head' => 'Academic Head',
+      _ => 'User',
+    };
+
+    final isStudent = roleRaw.toLowerCase() == 'student';
+
+    // Avoid stray bullet if either course/section is missing
+    final headerSubtitle = isStudent
+        ? [data['course'], data['section']]
+        .where((e) => (e != null && e.toString().trim().isNotEmpty))
+        .join(' • ')
+        : (data['department'] as String?);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF6F7FB),
+      appBar: AppBar(
+        automaticallyImplyLeading: false,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        foregroundColor: const Color(0xFF0058CE),
+        title: Text('Profile', style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700)),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.symmetric(vertical: 20),
+        children: [
+          ProfileHeaderCard(
+            name: controller.displayName,
+            roleLabel: roleLabel,
+            subtitle: headerSubtitle,
+            onEditPhoto: () async {
+              await controller.pickAndUploadImage(context);
+            },
+          ),
+          const SizedBox(height: 16),
+          InfoCard(
+            title: 'Personal Info',
+            children: [
+              ReadonlyTile(icon: Icons.badge_outlined, label: 'Name', value: controller.displayName),
+              ReadonlyTile(icon: Icons.mail_outline, label: 'Email', value: data['email']),
+              ReadonlyTile(icon: Icons.phone_outlined, label: 'Contact', value: data['contact'] ?? data['phone']),
+            ],
+          ),
+          const SizedBox(height: 16),
+          InfoCard(
+            title: 'School Info',
+            children: isStudent
+                ? [
+              ReadonlyTile(icon: Icons.computer_outlined, label: 'Course', value: data['course']),
+              ReadonlyTile(icon: Icons.calendar_month_outlined, label: 'Year Level', value: data['yearLevelName']),
+              ReadonlyTile(icon: Icons.group_outlined, label: 'Section', value: data['section']),
+            ]
+                : [
+              ReadonlyTile(icon: Icons.apartment_outlined, label: 'Department', value: data['department']),
+              if ((data['subjects'] is List) && (data['subjects'] as List).isNotEmpty)
+                ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.menu_book_outlined, color: Color(0xFF0058CE)),
+                  title: Text('Subjects Handled', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  subtitle: Text((data['subjects'] as List).join(' • '), style: GoogleFonts.poppins()),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          InfoCard(
+            title: 'Tools',
+            children: [
+              ListTile(
+                leading: const Icon(Icons.face_retouching_natural, color: Color(0xFF0058CE)),
+                title: Text('Face Recognition Tester', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.pushNamed(context, '/face-recognition-tester');
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Open Face Recognition Tester')),
+                  );
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          InfoCard(
+            title: 'Account',
+            children: [
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.red),
+                title: Text('Logout', style: GoogleFonts.poppins(color: Colors.red, fontWeight: FontWeight.w600)),
+                onTap: () async {
+                  await controller.logout(context);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }

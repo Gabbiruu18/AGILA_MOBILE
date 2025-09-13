@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Services/auth_service.dart';
+import '../../Service_Modules/Login/auth_m.dart';
 import 'terms.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,6 +18,9 @@ class LoginScreenState extends State<LoginScreen> {
   bool _termsAccepted = false;
   bool _rememberMe = false;
   bool _isLoading = false;
+
+  static const _assetPath = 'assets/images/agila_opening.png';
+
 
   @override
   void initState() {
@@ -54,16 +57,22 @@ class LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
+      backgroundColor: const Color(0xFFF6F7FB),
       body: Stack(
         children: [
           Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 16),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  RichText(
+                  Image.asset(
+                    _assetPath,
+                    width: 150,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  /*RichText(
                     text: TextSpan(
                       children: [
                         TextSpan(
@@ -84,7 +93,7 @@ class LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
-                  ),
+                  ),*/
                   const SizedBox(height: 4),
                   Text(
                     'AI-Driven General Identification and Logging Attendance',

@@ -1,186 +1,176 @@
-import 'dart:io';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:project_agila/Screens/UI_Screen/profile.dart';
-
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
+import 'package:project_agila/Screens/UI_Screen/notification.dart';
+import 'package:project_agila/Service_Modules/Home/home_controller.dart';
+import 'package:project_agila/Service_Modules/Home/home_UI.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   final String role;
+  final String uid;
   final String name;
 
-  const HomeScreen({super.key, required this.role, required this.name});
+  const HomeScreen({
+    Key? key,
+    required this.role,
+    required this.uid,
+    required this.name,
+  }) : super(key: key);
 
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final HomeController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = HomeController();
+    controller.addListener(_onChanged);
+    controller.init(role: widget.role, uid: widget.uid, name: widget.name);
+  }
+
+  @override
+  void dispose() {
+    controller.removeListener(_onChanged);
+    controller.dispose();
+    super.dispose();
+  }
+
+  void _onChanged() {
+    if (mounted) setState(() {});
+  }
+
+  String _greeting() {
+    final h = DateTime.now().hour;
+    if (h >= 5 && h <= 11) return 'Magandang Umaga!';
+    if (h >= 12 && h <= 16) return 'Magandang Hapon!';
+    return 'Magandang Gabi!';
+  }
+
+  void _openNotesDialog() {
+    final textController = TextEditingController(
+      text: controller.noteText == 'Tap to write notes' ? '' : controller.noteText,
+    );
+
+    showDialog(
+      context: context,
+      builder: (context) => NotesDialog(
+        controller: textController,
+        onReset: () async {
+          await controller.resetNote(context);
+          if (mounted) Navigator.pop(context);
+        },
+        onCancel: () => Navigator.pop(context),
+        onSave: () async {
+          await controller.saveNote(context, textController.text);
+          if (mounted) Navigator.pop(context);
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final formattedMonthYear = DateFormat('MMMM yyyy').format(now);
     final formattedDay = DateFormat('EEEE').format(now);
+    final formattedDayNumber = DateFormat('d').format(now);
+
+    // Decide which schedule UI to use
+    final isTeacherOrHead = widget.role == 'teacher' ||
+        widget.role == 'program_head' ||
+        widget.role == 'academic_head';
+
+// Dummy schedule list (same as before; you can keep your source of truth)
+    final items = [
+      // Pass section/room for both; students will show prof+room+section only
+      ScheduleItem(
+        subject: '1st Sub',
+        professor: 'Prof. Moreno',
+        startTime: '08:00',
+        endTime: '09:00',
+        course: 'BSIT',
+        section: '3A',
+        room: '203',
+      ),
+      ScheduleItem(
+        subject: '2nd Sub',
+        professor: 'Prof. Cruz',
+        startTime: '09:30',
+        endTime: '10:30',
+        course: 'BSIT',
+        section: '3A',
+        room: '105',
+      ),
+      ScheduleItem(
+        subject: '3rd Sub',
+        professor: 'Prof. Maximo',
+        startTime: '11:00',
+        endTime: '12:00',
+        course: 'BSIT',
+        section: '3A',
+        room: '307',
+      ),
+    ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
+      backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
-                child: IntrinsicHeight(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _buildHeader(name),
-                      const SizedBox(height: 16),
-                      _buildTopBoxes(formattedMonthYear, formattedDay),
-                      const SizedBox(height: 24),
-                      _buildSchedule(role),
-                      const Spacer(),
-                    ],
-                  ),
+        child: controller.isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              HeaderBar(
+                greeting: _greeting(),
+                name: widget.name,
+                role: widget.role,
+                course: controller.course,
+                section: controller.section,
+                department: controller.department,
+                unreadCount: controller.unreadCount,
+                onOpenNotifications: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => NotificationModal(uid: widget.uid, role: widget.role),
+                  );
+                },
+              ),
+
+              const SizedBox(height: 8),
+
+              TopBoxes(
+                monthYear: formattedMonthYear,
+                day: formattedDay,
+                dayNumber: formattedDayNumber,
+                onEditNotes: _openNotesDialog,
+                noteText: controller.noteText,
+              ),
+
+              const SizedBox(height: 16),
+
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                child: isTeacherOrHead
+                    ? TeacherScheduleCard(
+                  items: items,
+                  title: 'Schedule for Today',
+                )
+                    : StudentScheduleCard(
+                  items: items,
+                  title: 'Schedule for Today',
                 ),
               ),
-            );
-          },
+
+            ],
+          ),
         ),
       ),
     );
   }
-
-  Widget _buildHeader(String name) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Magandang Araw!',
-                style: GoogleFonts.poppins(color: const Color(0xFFC88000), fontSize: 14),
-              ),
-              Text(
-                name,
-                style: GoogleFonts.poppins(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: const Color(0xFF0058CE),
-                ),
-              ),
-            ],
-          ),
-          const Icon(Icons.notifications_none, color: Color(0xFFC88000), size: 28),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopBoxes(String monthYear, String day) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Container(
-              height: 130,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF0058CE), width: 2),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(monthYear, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(HttpHeaders.dateHeader, style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(day, style: GoogleFonts.poppins()),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Container(
-              height: 130,
-              margin: const EdgeInsets.only(left: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFF0058CE), width: 2),
-              ),
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(8.0),
-                  child: Text(
-                    'To do list\n(user can input a note)',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 14),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSchedule(String role) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'SCHEDULE FOR TODAY',
-            style: GoogleFonts.poppins(
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF0058CE),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.grey[200],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF0058CE), width: 2),
-            ),
-            child: Column(
-              children: List.generate(3, (index) {
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('${index + 1}st Sub', style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
-                      Text('(Professor)', style: GoogleFonts.poppins()),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Time', style: GoogleFonts.poppins()),
-                          Text('Time', style: GoogleFonts.poppins()),
-                        ],
-                      ),
-                      if (index < 2) const Divider(),
-                    ],
-                  ),
-                );
-              }),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-
-
 }

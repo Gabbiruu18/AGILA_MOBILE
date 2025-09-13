@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../Utils/biometric_util.dart';
-import '../Services/auth_service.dart';
+import '../../Service_Modules/Login/auth_m.dart';
+import '../../Utils/biometric_util.dart';
 import 'terms.dart';
 
 class QuickLoginScreen extends StatefulWidget {
@@ -19,6 +19,8 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   String displayName = '';
   bool _termsAccepted = false;
   TextEditingController pinController = TextEditingController();
+
+
 
   @override
   void initState() {
@@ -52,7 +54,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     if (snapshot.docs.isNotEmpty) {
       final data = snapshot.docs.first.data();
       setState(() {
-        displayName = data['firstName'] ?? '';
+        displayName = data['firstName']; data['lastName'] ?? '';
       });
     }
   }
@@ -178,10 +180,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     );
   }
 
-
-
-
-
   void _showTermsDialog() {
     showDialog(
       context: context,
@@ -202,7 +200,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
+      backgroundColor: const Color(0xFFF6F7FB),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -254,7 +252,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Color(0xFFFFFFFF),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
@@ -326,7 +324,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
         width: 120,
         height: 120,
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: Color(0xFFFFFFFF),
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(

@@ -1,9 +1,11 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
 
 class FaceRecognitionTesterScreen extends StatefulWidget {
   const FaceRecognitionTesterScreen({super.key});
@@ -39,7 +41,7 @@ class _FaceRecognitionTesterScreenState
     setState(() => _isCameraInitialized = true);
   }
 
-  Future<void> _scanFace() async {
+  /*Future<void> _scanFace() async {
     if (!_cameraController.value.isInitialized) return;
 
     setState(() {
@@ -53,7 +55,7 @@ class _FaceRecognitionTesterScreenState
       final File imageFile = File('${tempDir.path}/test_face.jpg');
       await picture.saveTo(imageFile.path);
 
-      final uri = Uri.parse('http://192.168.1.6:8000/recognize-face');
+      final uri = Uri.parse('http://192.168.137.41:8000/recognize-face');
       final request = http.MultipartRequest('POST', uri)
         ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
 
@@ -76,7 +78,64 @@ class _FaceRecognitionTesterScreenState
     } finally {
       setState(() => _isRecognizing = false);
     }
+  }*/
+
+
+  Future<void> _scanFace() async {
+    if (!_cameraController.value.isInitialized) return;
+
+    setState(() {
+      _isRecognizing = true;
+      _recognitionResult = 'Scanning...';
+    });
+
+    try {
+      final Directory tempDir = await getTemporaryDirectory();
+      final XFile picture = await _cameraController.takePicture();
+      final File imageFile = File('${tempDir.path}/test_face.jpg');
+      await picture.saveTo(imageFile.path);
+
+      final uri = Uri.parse('http://192.168.182.246:8000/recognize-face');
+      final request = http.MultipartRequest('POST', uri)
+        ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> responseData = Map<String, dynamic>.from(
+            jsonDecode(responseBody));
+
+        String name = responseData['name'] ?? 'Unknown';
+        String role = responseData['role'] ?? 'Unknown';
+        double similarity = responseData['similarity'] ?? 0.0;
+
+        setState(() {
+          _recognitionResult = '''
+✅ Recognized:
+Name: $name
+Role: $role
+Similarity: ${(similarity * 100).toStringAsFixed(2)}%
+        ''';
+        });
+      } else {
+        final Map<String, dynamic> responseData = Map<String, dynamic>.from(
+            jsonDecode(responseBody));
+
+        setState(() {
+          _recognitionResult = '❌ Not recognized: ${responseData['status']}';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _recognitionResult = 'Error: ${e.toString()}';
+      });
+    } finally {
+      setState(() => _isRecognizing = false);
+    }
   }
+
+
 
   @override
   void dispose() {

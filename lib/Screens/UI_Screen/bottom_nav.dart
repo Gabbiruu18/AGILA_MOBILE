@@ -3,6 +3,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:project_agila/Screens/UI_Screen/home.dart';
 import 'package:project_agila/Screens/UI_Screen/profile.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:project_agila/Screens/UI_Screen/request.dart';
+import 'package:project_agila/Screens/UI_Screen/attendance.dart';
+// NEW: schedule tab for staff roles
+import 'package:project_agila/Screens/UI_Screen/schedule.dart';
 
 class MainLayout extends StatefulWidget {
   final String role;
@@ -13,7 +17,8 @@ class MainLayout extends StatefulWidget {
     super.key,
     required this.role,
     required this.name,
-    required this.uid, required bool faceRegistered,
+    required this.uid,
+    required bool faceRegistered,
   });
 
   @override
@@ -23,32 +28,46 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
+  // staff roles use Schedule instead of Attendance
+  bool get _isStaffRole {
+    final r = widget.role.toLowerCase();
+    return r == 'teacher' ||
+        r == 'program_head' || r == 'program' ||
+        r == 'academic_head' || r == 'academic';
+  }
+
   List<Widget> get _screens => [
-    HomeScreen(role: widget.role, name: widget.name),
-    const Center(child: Text('Attendance Page')),
-    const Center(child: Text('Request Page')),
+    HomeScreen(role: widget.role, name: widget.name, uid: widget.uid),
+    _isStaffRole
+        ? ScheduleScreen(uid: widget.uid, role: widget.role)
+        : const AttendanceScreen(),
+    RequestListScreen(uid: widget.uid, role: widget.role, name: widget.name),
     ProfileScreen(role: widget.role, uid: widget.uid),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFFFFFF),
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
+        backgroundColor: const Color(0xFFF6F7FB),
         selectedItemColor: const Color(0xFF0058CE),
         unselectedItemColor: const Color(0xFFC88000),
         selectedLabelStyle: GoogleFonts.poppins(),
         unselectedLabelStyle: GoogleFonts.poppins(),
-        onTap: (index) {
-          setState(() => _currentIndex = index);
-        },
+        onTap: (index) => setState(() => _currentIndex = index),
         type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.check_circle), label: 'Attendance'),
-          BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Request'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(
+            // icon changes with the label too
+            icon: Icon(_isStaffRole ? Icons.calendar_month : Icons.check_circle),
+            label: _isStaffRole ? 'Schedule' : 'Attendance',
+          ),
+          const BottomNavigationBarItem(icon: Icon(Icons.settings), label: 'Request'),
+          const BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
         ],
       ),
     );
