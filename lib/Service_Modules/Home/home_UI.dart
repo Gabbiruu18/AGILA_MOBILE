@@ -52,9 +52,9 @@ class HeaderBar extends StatelessWidget {
   final String greeting;
   final String name;
   final String role;
-  final String? course;       // used for students
-  final String? section;      // used for students
-  final String? department;   // ✅ NEW: used for teachers/heads
+  final String? courseName;       // used for students
+  final String? sectionName;      // used for students
+  final String? departmentName;// ✅ NEW: used for teachers/heads
   final VoidCallback onOpenNotifications;
   final int unreadCount;
 
@@ -63,11 +63,12 @@ class HeaderBar extends StatelessWidget {
     required this.greeting,
     required this.name,
     required this.role,
-    required this.course,
-    required this.section,
+    required this.courseName,
+    required this.sectionName,
     required this.onOpenNotifications,
     required this.unreadCount,
-    this.department, // ✅ NEW (optional)
+    required this.departmentName,
+    // ✅ NEW (optional)
   });
 
   bool get _isTeacherOrHead =>
@@ -153,28 +154,28 @@ class HeaderBar extends StatelessWidget {
                 ),
 
                 // If teacher/head: show Department
-                if (_isTeacherOrHead && department != null && department!.trim().isNotEmpty) ...[
+                if (_isTeacherOrHead && departmentName != null && departmentName!.trim().isNotEmpty) ...[
                   const SizedBox(width: 8),
                   TagChip(
-                    label: department!,
+                    label: departmentName!,
                     color: const Color(0xFFC88000),
                     icon: Icons.domain, // or Icons.apartment
                   ),
                 ],
 
                 // If student: show Course + Section
-                if (!_isTeacherOrHead && course != null && course!.trim().isNotEmpty) ...[
+                if (!_isTeacherOrHead && courseName != null && courseName!.trim().isNotEmpty) ...[
                   const SizedBox(width: 8),
                   TagChip(
-                    label: course!,
+                    label: courseName!,
                     color: const Color(0xFFC88000),
                     icon: Icons.menu_book,
                   ),
                 ],
-                if (!_isTeacherOrHead && section != null && section!.trim().isNotEmpty) ...[
+                if (!_isTeacherOrHead && sectionName != null && sectionName!.trim().isNotEmpty) ...[
                   const SizedBox(width: 8),
                   TagChip(
-                    label: section!,
+                    label: sectionName!,
                     color: const Color(0xFF33B864),
                     icon: Icons.group,
                   ),
@@ -303,21 +304,21 @@ class NotesDialog extends StatelessWidget {
 
 
 class ScheduleItem {
-  final String subject;
+  final String subjectName;
   final String professor; // can be empty for teacher view
   final String startTime;
   final String endTime;
-  final String? course;
-  final String? section;
+  final String? courseName;
+  final String? sectionName;
   final String? room;
 
   ScheduleItem({
-    required this.subject,
+    required this.subjectName,
     required this.professor,
     required this.startTime,
     required this.endTime,
-    this.course,
-    this.section,
+    this.courseName,
+    this.sectionName,
     this.room,
   });
 }
@@ -349,63 +350,75 @@ class TeacherScheduleCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Row-style chips + details
-          ...List.generate(items.length, (i) {
-            final it = items[i];
-            return Container(
-              margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+          // Show placeholder if no schedules
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20.0),
+              child: Center(
+                child: Text(
+                  'No schedules for today',
+                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Subject row + time on trailing side
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          it.subject,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+            )
+          else
+          // Row-style chips + details
+            ...List.generate(items.length, (i) {
+              final it = items[i];
+              return Container(
+                margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Subject row + time on trailing side
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            it.subjectName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${it.startTime} — ${it.endTime}',
-                            style: GoogleFonts.poppins(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${it.startTime} — ${it.endTime}',
+                              style: GoogleFonts.poppins(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Chips: Section, Course, Room
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      if (it.section != null && it.section!.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.group, label: it.section!),
-                      if (it.course != null && it.course!.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.menu_book, label: it.course!),
-                      if (it.room != null && it.room!.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.meeting_room, label: 'Room ${it.room!}'),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
+                    // Chips: Section, Course, Room
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (it.sectionName != null && it.sectionName!.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.group, label: it.sectionName!),
+                        if (it.courseName != null && it.courseName!.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.menu_book, label: it.courseName!),
+                        if (it.room != null && it.room!.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.meeting_room, label: 'Room ${it.room!}'),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -439,61 +452,73 @@ class StudentScheduleCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          ...List.generate(items.length, (i) {
-            final it = items[i];
-            return Container(
-              margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: const Color(0xFFE2E8F0)),
+          // Show placeholder if no schedules
+          if (items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 20.0),
+              child: Center(
+                child: Text(
+                  'No schedules for today',
+                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          it.subject,
-                          style: GoogleFonts.poppins(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
+            )
+          else
+            ...List.generate(items.length, (i) {
+              final it = items[i];
+              return Container(
+                margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            it.subjectName,
+                            style: GoogleFonts.poppins(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${it.startTime} — ${it.endTime}',
-                            style: GoogleFonts.poppins(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${it.startTime} — ${it.endTime}',
+                              style: GoogleFonts.poppins(fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
 
-                  // Chips: Professor, Room, Section (only)
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      if (it.professor.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.person, label: it.professor),
-                      if (it.room != null && it.room!.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.meeting_room, label: 'Room ${it.room!}'),
-                      if (it.section != null && it.section!.trim().isNotEmpty)
-                        _InfoChip(icon: Icons.group, label: it.section!),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          }),
+                    // Chips: Professor, Room, Section (only)
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      children: [
+                        if (it.professor.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.person, label: it.professor),
+                        if (it.room != null && it.room!.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.meeting_room, label: 'Room ${it.room!}'),
+                        if (it.sectionName != null && it.sectionName!.trim().isNotEmpty)
+                          _InfoChip(icon: Icons.group, label: it.sectionName!),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -634,7 +659,6 @@ class _SideBorderCard extends StatelessWidget {
   final Color sideColor;
 
   const _SideBorderCard({
-    super.key,
     required this.child,
     this.height,
     required this.sideColor,
@@ -663,8 +687,3 @@ class _SideBorderCard extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

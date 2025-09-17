@@ -45,19 +45,87 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
 
   Future<void> _fetchUserDetailsFromFirestore(String email) async {
-    final snapshot = await FirebaseFirestore.instance
-        .collectionGroup('accounts')
-        .where('email', isEqualTo: email)
-        .limit(1)
-        .get();
+    try {
+      final db = FirebaseFirestore.instance;
 
-    if (snapshot.docs.isNotEmpty) {
-      final data = snapshot.docs.first.data();
+      // 1) Try emailLower (case-insensitive) in collectionGroup
+      QuerySnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await db
+            .collectionGroup('accounts')
+            .where('emailLower', isEqualTo: email.toLowerCase())
+            .limit(1)
+            .get();
+      } on FirebaseException catch (e) {
+        // If an index is required or field missing, fall back to 'email'
+        // debugPrint('emailLower query failed: $e');
+        snap = await db
+            .collectionGroup('accounts')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+      }
+
+      // 2) If still empty, probe known roles directly (no collectionGroup needed)
+      if (snap.docs.isEmpty) {
+        const roles = ['student', 'teacher', 'program_head', 'academic_head'];
+        for (final role in roles) {
+          final q = await db
+              .collection('users').doc(role)
+              .collection('accounts')
+              .where('email', isEqualTo: email)
+              .limit(1)
+              .get();
+          if (q.docs.isNotEmpty) {
+            snap = q;
+            break;
+          }
+        }
+      }
+
+      if (snap.docs.isEmpty) {
+        if (!mounted) return;
+        setState(() => displayName = ''); // nothing found
+        return;
+      }
+
+      final data = snap.docs.first.data();
+
+      // Helper to safely pick a string from possible field names
+      String? pick(List<String> keys) {
+        for (final k in keys) {
+          final v = data[k];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+        }
+        return null;
+      }
+
+      final disp  = pick(['displayName', 'display_name', 'fullName', 'full_name', 'name']);
+      final first = pick(['firstName', 'first_name', 'firstname', 'givenName', 'given_name']);
+      final last  = pick(['lastName', 'last_name', 'lastname', 'familyName', 'family_name']);
+
+      String composed = disp ?? [first, last].where((s) => s != null && s.isNotEmpty).join(' ').trim();
+      if (composed.isEmpty) {
+        // last resort: show the local part of the email
+        composed = email.split('@').first;
+      }
+
+      if (!mounted) return;
       setState(() {
-        displayName = data['firstName']; data['lastName'] ?? '';
+        displayName = composed;
+      });
+    } catch (e) {
+      // debugPrint('Fetch quick-login name failed: $e');
+      if (!mounted) return;
+      setState(() {
+        // still show something instead of blank
+        displayName = email.split('@').first;
       });
     }
   }
+
+
+
 
   Future<void> _clearRememberedUser() async {
     final prefs = await SharedPreferences.getInstance();

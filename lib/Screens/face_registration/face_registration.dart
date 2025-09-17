@@ -5,7 +5,7 @@ import 'package:http/http.dart' as http;
 import 'face_registrationLogic.dart';
 
 class FacialRegistrationScreen extends StatefulWidget {
-  const FacialRegistrationScreen({Key? key}) : super(key: key);
+  const FacialRegistrationScreen({super.key});
 
   @override
   _FacialRegistrationScreenState createState() => _FacialRegistrationScreenState();

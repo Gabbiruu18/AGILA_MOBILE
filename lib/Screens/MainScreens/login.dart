@@ -62,7 +62,7 @@ class LoginScreenState extends State<LoginScreen> {
         children: [
           Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [

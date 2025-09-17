@@ -35,6 +35,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() {});
   }
 
+  // Helper: treat these roles as staff (Tools card visible)
+  bool _isStaffRole(String? role) {
+    final r = (role ?? '').trim().toLowerCase();
+    const staff = {
+      'teacher',
+      'teachers',        // tolerate plural
+      'program head',
+      'program_head',
+      'academic head',
+      'academic_head',
+      'acadamic head',   // tolerate your earlier typo
+    };
+    return staff.contains(r);
+  }
+
   @override
   Widget build(BuildContext context) {
     final isLoading = controller.isLoading;
@@ -47,11 +62,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    final roleLabel = switch (roleRaw.toLowerCase()) {
+    final roleLabel = switch ((roleRaw).toLowerCase()) {
       'student' => 'Student',
       'teacher' => 'Teacher',
-      'program_head' => 'Program Head',
-      'academic_head' => 'Academic Head',
+      'program_head' || 'program head' => 'Program Head',
+      'academic_head' || 'academic head' => 'Academic Head',
       _ => 'User',
     };
 
@@ -59,10 +74,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     // Avoid stray bullet if either course/section is missing
     final headerSubtitle = isStudent
-        ? [data['course'], data['section']]
+        ? [data['role'], data['sectionName']]
         .where((e) => (e != null && e.toString().trim().isNotEmpty))
         .join(' • ')
-        : (data['department'] as String?);
+        : (data['departmentName'] as String?);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -86,6 +101,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
           ),
           const SizedBox(height: 16),
+
+          // Personal Info
           InfoCard(
             title: 'Personal Info',
             children: [
@@ -95,13 +112,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
+
+          // School Info
           InfoCard(
             title: 'School Info',
             children: isStudent
                 ? [
-              ReadonlyTile(icon: Icons.computer_outlined, label: 'Course', value: data['course']),
+              ReadonlyTile(icon: Icons.computer_outlined, label: 'Course', value: data['courseAcronym']),
               ReadonlyTile(icon: Icons.calendar_month_outlined, label: 'Year Level', value: data['yearLevelName']),
-              ReadonlyTile(icon: Icons.group_outlined, label: 'Section', value: data['section']),
+              ReadonlyTile(icon: Icons.group_outlined, label: 'Section', value: data['sectionName']),
             ]
                 : [
               ReadonlyTile(icon: Icons.apartment_outlined, label: 'Department', value: data['department']),
@@ -115,24 +134,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           const SizedBox(height: 16),
-          InfoCard(
-            title: 'Tools',
-            children: [
-              ListTile(
-                leading: const Icon(Icons.face_retouching_natural, color: Color(0xFF0058CE)),
-                title: Text('Face Recognition Tester', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () {
-                  Navigator.pushNamed(context, '/face-recognition-tester');
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Open Face Recognition Tester')),
-                  );
-                },
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
 
+          // Tools — visible only to staff roles
+          if (_isStaffRole(roleRaw))
+            InfoCard(
+              title: 'Tools',
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.face_retouching_natural, color: Color(0xFF0058CE)),
+                  title: Text('Face Recognition Tester', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    Navigator.pushNamed(context, '/face-recognition-tester');
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Open Face Recognition Tester')),
+                    );
+                  },
+                ),
+              ],
+            ),
+          if (_isStaffRole(roleRaw)) const SizedBox(height: 16),
+
+          // Account
           InfoCard(
             title: 'Account',
             children: [

@@ -85,36 +85,7 @@ class _HomeScreenState extends State<HomeScreen> {
         widget.role == 'academic_head';
 
 // Dummy schedule list (same as before; you can keep your source of truth)
-    final items = [
-      // Pass section/room for both; students will show prof+room+section only
-      ScheduleItem(
-        subject: '1st Sub',
-        professor: 'Prof. Moreno',
-        startTime: '08:00',
-        endTime: '09:00',
-        course: 'BSIT',
-        section: '3A',
-        room: '203',
-      ),
-      ScheduleItem(
-        subject: '2nd Sub',
-        professor: 'Prof. Cruz',
-        startTime: '09:30',
-        endTime: '10:30',
-        course: 'BSIT',
-        section: '3A',
-        room: '105',
-      ),
-      ScheduleItem(
-        subject: '3rd Sub',
-        professor: 'Prof. Maximo',
-        startTime: '11:00',
-        endTime: '12:00',
-        course: 'BSIT',
-        section: '3A',
-        room: '307',
-      ),
-    ];
+
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
@@ -130,9 +101,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 greeting: _greeting(),
                 name: widget.name,
                 role: widget.role,
-                course: controller.course,
-                section: controller.section,
-                department: controller.department,
+                courseName: controller.course,
+                sectionName: controller.section,
+                departmentName: controller.department,
                 unreadCount: controller.unreadCount,
                 onOpenNotifications: () {
                   showDialog(
@@ -158,11 +129,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
                 child: isTeacherOrHead
                     ? TeacherScheduleCard(
-                  items: items,
+                  items: controller.todaySchedules,
                   title: 'Schedule for Today',
                 )
                     : StudentScheduleCard(
-                  items: items,
+                  items: controller.todaySchedules,
                   title: 'Schedule for Today',
                 ),
               ),

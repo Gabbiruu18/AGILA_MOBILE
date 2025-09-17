@@ -34,7 +34,7 @@ class BiometricUtil {
         .get();
 
     if (querySnapshot.docs.isNotEmpty) {
-      return querySnapshot.docs.first["email"]; // For retrieving the user's email
+      return querySnapshot.docs.first["firstName" + "lastName"]; // For retrieving the user's email
     }
     return null;
   }
