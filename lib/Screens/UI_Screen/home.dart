@@ -103,7 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 role: widget.role,
                 courseName: controller.course,
                 sectionName: controller.section,
-                departmentName: controller.department,
+                departmentName: controller.departmentRaw,
                 unreadCount: controller.unreadCount,
                 onOpenNotifications: () {
                   showDialog(

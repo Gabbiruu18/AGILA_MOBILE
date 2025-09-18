@@ -1,9 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'addRequest.dart';
+import 'package:project_agila/Service_Modules/Request/addRequest.dart';
 import 'history.dart';
-import 'viewRequest.dart';
 
 const kAgilaBlue = Color(0xFF0058CE);
 const kAgilaGold = Color(0xFFC88000);
@@ -235,7 +234,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
                         builder: (_) => AddRequestModal(
                           uid: widget.uid,
                           role: widget.role,
-                          name: "YourName", // TODO: replace with real name
+                          name: widget.name,
                         ),
                       );
                     },
@@ -307,19 +306,6 @@ class _RequestListScreenState extends State<RequestListScreen> {
                         timestamp: ts,
                         isSentView: isSentView,
                         onTap: () {
-                          // Use your existing dialog OR the new bottom sheet.
-                          // 1) Keep your existing:
-                          // showDialog(
-                          //   context: context,
-                          //   builder: (_) => ViewRequestModal(
-                          //     data: data,
-                          //     requestId: doc.id,
-                          //     role: widget.role,
-                          //     uid: widget.uid,
-                          //   ),
-                          // );
-
-                          // 2) New lightweight details sheet (recommended):
                           _openDetailsSheet(
                             data: data,
                             requestId: doc.id,

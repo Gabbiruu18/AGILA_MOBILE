@@ -54,8 +54,6 @@ class HomeController extends ChangeNotifier {
 
       // Acronyms for compact chips/labels
       course     = _toAcronym(courseRaw ?? '', maxLetters: 4);
-      department = _toAcronym(departmentRaw ?? '', maxLetters: 4);
-
       // 2) Load or create note
       noteText = await _service.getOrCreateNote(role: role, uid: uid);
 

@@ -1,6 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:project_agila/Service_Modules/History/history_m.dart';// <-- module import
+import 'package:project_agila/Service_Modules/History/history_controller.dart';// <-- module import
 
 class RequestHistoryModal extends StatelessWidget {
   final String uid;
