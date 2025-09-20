@@ -3,9 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Service_Modules/Request/addRequest.dart';
 import 'history.dart';
-
-const kAgilaBlue = Color(0xFF0058CE);
-const kAgilaGold = Color(0xFFC88000);
+import 'package:project_agila/Screens/Theme/agila_theme.dart';
 
 class RequestListScreen extends StatefulWidget {
   final String uid;
@@ -55,7 +53,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      //backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(
         automaticallyImplyLeading: false,
         backgroundColor: Colors.transparent,
@@ -64,13 +62,13 @@ class _RequestListScreenState extends State<RequestListScreen> {
           'Requests',
           style: GoogleFonts.poppins(
             fontSize: 24,
-            color: kAgilaBlue,
+            color: Theme.of(context).colorScheme.primary,
             fontWeight: FontWeight.bold,
           ),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_circle, color: kAgilaGold),
+            icon: Icon(Icons.add_circle, color: Theme.of(context).colorScheme.secondary),
             onPressed: () {
               showDialog(
                 context: context,
@@ -84,7 +82,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
             tooltip: 'Add Request',
           ),
           IconButton(
-            icon: const Icon(Icons.history, color: Color(0xFF0045A2)),
+            icon: Icon(Icons.history, color: Theme.of(context).colorScheme.primary),
             onPressed: () {
               showDialog(
                 context: context,
@@ -109,8 +107,8 @@ class _RequestListScreenState extends State<RequestListScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: Colors.black12),
+                  color: Theme.of(context).colorScheme.surface,
+                  border: Border.all(color: Theme.of(context).colorScheme.surfaceContainerHighest),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -169,7 +167,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
                       hintText: 'Search',
                       prefixIcon: const Icon(Icons.search),
                       filled: true,
-                      fillColor: Colors.white,
+                      fillColor: Theme.of(context).colorScheme.surfaceContainer,
                       contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -202,8 +200,8 @@ class _RequestListScreenState extends State<RequestListScreen> {
                   .map((s) => Padding(
                 padding: const EdgeInsets.only(right: 8),
                 child: ChoiceChip(
-                  backgroundColor: const Color(0xFFFFFFFF),
-                  selectedColor: const Color(0xFFE9F1FF),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  selectedColor: Theme.of(context).colorScheme.surfaceContainer,
                   label: Text(s),
                   selected: statusFilter == s,
                   onSelected: (_) => setState(() => statusFilter = s),
@@ -259,9 +257,8 @@ class _RequestListScreenState extends State<RequestListScreen> {
                 }).toList();
 
                 if (filtered.isEmpty) {
-                  return const Center(
-                    child: Text("No requests match your filters.",
-                        style: TextStyle(color: Colors.black54)),
+                  return Center(
+                    child: Text("No requests match your filters.")
                   );
                 }
 
@@ -517,8 +514,8 @@ class _RequestListScreenState extends State<RequestListScreen> {
             width: 90,
             child: Text(
               keyLabel,
-              style: const TextStyle(
-                color: Colors.black54,
+              style: TextStyle(
+                //color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -527,7 +524,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(color: Colors.black87),
+              //style: TextStyle(color: Theme.of(context).colorScheme.surfaceContainerHighest),
               softWrap: true,
             ),
           ),
@@ -567,7 +564,7 @@ class _RequestCard extends StatelessWidget {
     final secondary = isSentView ? toText : fromText;
 
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       elevation: 0,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
@@ -577,7 +574,7 @@ class _RequestCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.black12),
+            border: Border.all(color: Theme.of(context).colorScheme.surface),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -600,21 +597,21 @@ class _RequestCard extends StatelessWidget {
               // Secondary line: To/From + time
               Row(
                 children: [
-                  const Icon(Icons.person, size: 16, color: Colors.black45),
+                  Icon(Icons.person, size: 16),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
                       secondary,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(color: Colors.black87),
+                      //style: TextStyle(color: Theme.of(context).colorScheme.surfaceContainer),
                     ),
                   ),
                   const SizedBox(width: 6),
-                  const Icon(Icons.access_time, size: 14, color: Colors.black38),
+                  Icon(Icons.access_time, size: 14),
                   const SizedBox(width: 2),
                   Text(_tinyTime(timestamp),
-                      style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                      style: TextStyle(fontSize: 12)),
                 ],
               ),
 
@@ -636,7 +633,7 @@ class _RequestCard extends StatelessWidget {
                         icon: const Icon(Icons.check),
                         label: const Text('Approve'),
                         style: ElevatedButton.styleFrom(
-                            backgroundColor: kAgilaGold, foregroundColor: Colors.white),
+                            backgroundColor: Theme.of(context).colorScheme.secondary, foregroundColor: Colors.white),
                         onPressed: onApprove,
                       ),
                     ),
@@ -670,16 +667,16 @@ class _StatusChip extends StatelessWidget {
     Color fg;
     switch (s) {
       case 'approved':
-        bg = const Color(0xFFE6F6EA);
+        bg = Theme.of(context).colorScheme.surface;
         fg = const Color(0xFF1F8E3A);
         break;
       case 'rejected':
-        bg = const Color(0xFFFDEBEC);
+        bg = Theme.of(context).colorScheme.surface;
         fg = const Color(0xFFD12D33);
         break;
       default:
-        bg = const Color(0xFFE9F1FF);
-        fg = kAgilaBlue;
+        bg = Theme.of(context).colorScheme.surface;
+        fg = Theme.of(context).colorScheme.primary;
         break;
     }
     return Container(
@@ -706,8 +703,8 @@ class _SortChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: Colors.black12),
+        color: Theme.of(context).colorScheme.surface,
+        border: Border.all(color: Theme.of(context).colorScheme.surfaceContainer),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -730,19 +727,20 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.inbox_outlined, size: 64, color: Colors.black26),
+        Icon(Icons.inbox_outlined, size: 64),
         const SizedBox(height: 12),
         const Text('No requests found', style: TextStyle(fontSize: 16)),
         const SizedBox(height: 6),
-        const Text('Try adjusting filters or create a new request.',
-            style: TextStyle(color: Colors.black54)),
+        Text('Try adjusting filters or create a new request.',
+            //style: TextStyle(color: Theme.of(context).colorScheme.surfaceContainerHighest)
+            ),
         if (showCTA) ...[
           const SizedBox(height: 12),
           ElevatedButton.icon(
-            icon: const Icon(Icons.add),
+            icon: const Icon(Icons.add, color: Colors.white,),
             label: const Text('Create Request'),
             style: ElevatedButton.styleFrom(
-                backgroundColor: kAgilaGold, foregroundColor: Colors.white),
+                backgroundColor: Theme.of(context).colorScheme.secondary, foregroundColor: Colors.white),
             onPressed: onCreate,
           ),
         ]
@@ -768,7 +766,7 @@ class _TabItem extends StatelessWidget {
       duration: const Duration(milliseconds: 160),
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
-        color: selected ? const Color(0xFFE9F1FF) : Colors.transparent,
+        color: selected ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.transparent,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -776,7 +774,7 @@ class _TabItem extends StatelessWidget {
         children: [
           Text(label,
               style: TextStyle(
-                color: selected ? kAgilaBlue : Colors.black87,
+                color: selected ? Theme.of(context).colorScheme.primary :  Theme.of(context).colorScheme.secondary,
                 fontWeight: FontWeight.w600,
               )),
           const SizedBox(width: 6),
@@ -784,11 +782,11 @@ class _TabItem extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: kAgilaBlue, borderRadius: BorderRadius.circular(999),
+                color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(999),
               ),
               child: Text('$badge',
-                  style: const TextStyle(
-                      color: Colors.white,
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
                       fontSize: 12,
                       fontWeight: FontWeight.bold)),
             ),

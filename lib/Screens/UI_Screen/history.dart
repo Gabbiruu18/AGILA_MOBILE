@@ -17,7 +17,7 @@ class RequestHistoryModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFFF2F5FA),
+      //backgroundColor: const Color(0xFFF2F5FA),
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -30,12 +30,12 @@ class RequestHistoryModal extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Request History',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: Color(0xFF0045A2),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
                 IconButton(
@@ -76,7 +76,7 @@ class RequestHistoryModal extends StatelessWidget {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.grey.shade200,
+                          color: Theme.of(context).colorScheme.surfaceContainerHigh,
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(

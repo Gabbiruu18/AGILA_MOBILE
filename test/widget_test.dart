@@ -1,29 +1,58 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:project_agila/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+// App pieces
+import 'package:project_agila/main.dart' show MyApp;
+import 'package:project_agila/Screens/Theme/theme_controller.dart';
+import 'package:project_agila/Screens/Theme/theme_scope.dart';
+import 'package:project_agila/Screens/MainScreens/opening.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  TestWidgetsFlutterBinding.ensureInitialized();
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  setUp(() async {
+    // Fresh in-memory prefs for each test run
+    SharedPreferences.setMockInitialValues({});
+  });
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
+  testWidgets('Builds MyApp and shows OpeningScreen', (WidgetTester tester) async {
+    final themeCtrl = ThemeController();
+    await themeCtrl.load();
+
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: themeCtrl,
+        child: MyApp(themeCtrl: themeCtrl),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Assert initial route renders OpeningScreen
+    expect(find.byType(OpeningScreen), findsOneWidget);
+  });
+
+  testWidgets('Theme toggles via ThemeController', (WidgetTester tester) async {
+    final themeCtrl = ThemeController();
+    await themeCtrl.load();
+
+    await tester.pumpWidget(
+      ThemeScope(
+        controller: themeCtrl,
+        child: MyApp(themeCtrl: themeCtrl),
+      ),
+    );
+    await tester.pump(); // build once
+
+    // MaterialApp should reflect controller.mode
+    var app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.themeMode, themeCtrl.mode);
+
+    // Flip to dark and verify MaterialApp updates
+    await themeCtrl.setMode(ThemeMode.dark);
     await tester.pump();
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    app = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(app.themeMode, ThemeMode.dark);
   });
 }

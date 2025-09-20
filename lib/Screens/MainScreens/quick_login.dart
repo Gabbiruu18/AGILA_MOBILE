@@ -267,8 +267,9 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      //backgroundColor: const Color(0xFFF6F7FB),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -301,32 +302,38 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
               Text(
                 'AI-Driven General Identification and Logging Attendance',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0045A2)),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 14, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 32),
 
               Text(
                 greeting,
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 20, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
-              Text(
+              /*Text(
                 displayName,
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.black87),
-              ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 16, fontWeight: FontWeight.w700),
+              ),*/
               const SizedBox(height: 12),
 
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Color(0xFFFFFFFF),
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   rememberedEmail ?? 'No email found',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[700]),
+                  style: GoogleFonts.poppins(fontSize: 13),
                 ),
               ),
               const SizedBox(height: 10),
@@ -335,7 +342,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                 onPressed: _clearRememberedUser,
                 child: Text(
                   'Switch Account',
-                  style: GoogleFonts.poppins(color: Colors.black, fontSize: 14),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w700)
                 ),
               ),
               const SizedBox(height: 20),
@@ -364,7 +371,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                 children: [
                   Checkbox(
                     value: _termsAccepted,
-                    activeColor: const Color(0xFF0058CE),
+                    activeColor: cs.primary,
                     onChanged: _toggleTerms,
                   ),
                   const SizedBox(width: 4),
@@ -382,6 +389,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   }
 
   Widget _buildLoginCard({
+
     required IconData icon,
     required String label,
     required VoidCallback onTap,
@@ -392,11 +400,10 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
         width: 120,
         height: 120,
         decoration: BoxDecoration(
-          color: Color(0xFFFFFFFF),
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -405,12 +412,12 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 36, color: const Color(0xFF0058CE)),
+            Icon(icon, size: 36, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.black),
+              style: GoogleFonts.poppins(fontSize: 14),
             ),
           ],
         ),

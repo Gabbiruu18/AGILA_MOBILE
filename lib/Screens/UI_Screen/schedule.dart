@@ -42,16 +42,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           // schedule.dart (inside build)
 
           return Scaffold(
-            backgroundColor: kBg, // same tint as Attendance
+            //backgroundColor: kBg, // same tint as Attendance
             appBar: AppBar(
               automaticallyImplyLeading: false,
               centerTitle: false,
               elevation: 0,
-              backgroundColor: kBg,
               title: Text(
                 "Schedule",
                 style: GoogleFonts.poppins(
-                  color: kAgilaBlue,
+                  color: Theme.of(context).colorScheme.primary,
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
                 ),
@@ -60,7 +59,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 PopupMenuButton<ViewMode>(
                   tooltip: "Switch view",
                   initialValue: ctrl.mode,
-                  color: Color(0xFFFFFFFF),
                   onSelected: ctrl.setMode,
                   itemBuilder: (context) => const [
                     PopupMenuItem(value: ViewMode.today, child: Text("Today")),
@@ -70,10 +68,10 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
                     padding: const EdgeInsets.symmetric(horizontal: 8.0),
                     child: Row(children: [
-                      const Icon(Icons.calendar_today_outlined, color: kAgilaBlue),
+                      Icon(Icons.calendar_today_outlined, color: Theme.of(context).colorScheme.primary),
                       const SizedBox(width: 4),
                       Text(ctrl.mode == ViewMode.today ? "Today" : "Week"),
-                      const Icon(Icons.arrow_drop_down, color: kAgilaBlue),
+                      Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.primary),
                     ]),
                   ),
                 ),
@@ -110,7 +108,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                         margin: const EdgeInsets.only(top: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFFFE0E0),
+                          color: Theme.of(context).colorScheme.surfaceContainer,
                           borderRadius: BorderRadius.circular(8),
                           border: Border.all(color: const Color(0xFFB3261E).withOpacity(.25)),
                         ),
@@ -149,7 +147,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          //color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
                           boxShadow: [BoxShadow(
                             blurRadius: 10, offset: const Offset(0, 4),
@@ -161,7 +159,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                           _thisWeekDateRangeText(),
                           textAlign: TextAlign.center,
                           style: GoogleFonts.poppins(
-                            color: Colors.black54,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -254,7 +251,7 @@ class _Week extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 6),
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.surface,
               border: Border.all(color: Colors.black12),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [BoxShadow(blurRadius: 10, offset: const Offset(0, 4), color: Colors.black.withOpacity(0.06))],
@@ -263,14 +260,14 @@ class _Week extends StatelessWidget {
               children: [
                 Row(children: [
                   Text('${weekdayLabel(day)} • ${_d2(date.day)}/${_d2(date.month)}',
-                      style: TextStyle(fontWeight: FontWeight.w700, color: isToday ? kAgilaBlue : Colors.black87)),
+                      style: TextStyle(fontWeight: FontWeight.w700, color: isToday ? Theme.of(context).colorScheme.primary : Colors.black87)),
                   if (isToday) ...[const SizedBox(width: 6), const NowDot()],
                 ]),
                 const SizedBox(height: 8),
                 if (items.isEmpty)
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 24),
-                    child: Text('No sessions', style: TextStyle(color: Colors.black45)),
+                    child: Text('No sessions'),
                   )
                 else
                   ...items.map((s) => Padding(
@@ -300,7 +297,7 @@ void _viewSession(BuildContext context, Session s) {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(s.subject, style: const TextStyle(fontWeight: FontWeight.bold)),
+          Text(s.subject, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           _kv('Section', s.section),
           _kv('Room', s.room),
@@ -318,7 +315,7 @@ void _viewSession(BuildContext context, Session s) {
 Widget _kv(String k, String v) => Padding(
   padding: const EdgeInsets.symmetric(vertical: 4),
   child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    SizedBox(width: 90, child: Text(k, style: const TextStyle(color: Colors.black54, fontWeight: FontWeight.w600))),
+    SizedBox(width: 90, child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600))),
     const SizedBox(width: 8),
     Expanded(child: Text(v)),
   ]),

@@ -191,7 +191,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFFF2F5FA),
+      //backgroundColor: const Color(0xFFF2F5FA),
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -203,7 +203,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('New Request', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0045A2))),
+                Text('New Request', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary)),
                 IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.of(context).pop()),
               ],
             ),
@@ -217,8 +217,10 @@ class _AddRequestModalState extends State<AddRequestModal> {
                     children: [
                       _styledField(
                         child: DropdownButtonFormField<String>(
+
                           value: _selectedType,
                           decoration: _inputDecoration('Type of Request'),
+                          dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest, // ✅ popup bg
                           items: const [
                             DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
                             DropdownMenuItem(value: 'Permission', child: Text('Permission')),
@@ -251,17 +253,17 @@ class _AddRequestModalState extends State<AddRequestModal> {
                       ),
                       ElevatedButton.icon(
                         onPressed: _pickFile,
-                        icon: const Icon(Icons.attach_file),
+                        icon: Icon(Icons.attach_file, color: Colors.white),
                         label: Text(_uploadedFileUrl == null ? 'Attach File' : 'File Attached'),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFC88000), foregroundColor: Colors.white),
+                        style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.secondary, foregroundColor: Colors.white),
                       ),
                       const SizedBox(height: 20),
                       ElevatedButton(
                         onPressed: _isSubmitting ? null : _submitRequest,
+                        style: ElevatedButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.primary, foregroundColor: Colors.white),
                         child: _isSubmitting
                             ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                             : const Text('Submit Request'),
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0058CE), foregroundColor: Colors.white),
                       ),
                     ],
                   ),
@@ -277,15 +279,26 @@ class _AddRequestModalState extends State<AddRequestModal> {
   Widget _styledField({required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
-      decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(12)
+
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: child,
     );
   }
 
+  // keep your helper, just add filled/fillColor
   InputDecoration _inputDecoration(String label) => InputDecoration(
     border: InputBorder.none,
     labelText: label,
-    labelStyle: const TextStyle(color: Color(0xFF0045A2), fontWeight: FontWeight.bold),
+    labelStyle: TextStyle(
+      color: Theme.of(context).colorScheme.primary,
+      fontWeight: FontWeight.bold,
+    ),
+    filled: true, // ✅ fills the field background
+    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest, // or any Color
   );
+
 }

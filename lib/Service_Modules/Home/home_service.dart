@@ -126,6 +126,7 @@ class HomeService {
     required String role,
     required String uid,
   }) async {
+
     final ids = await getAcademicIdsFromUser(role: role, uid: uid);
     if (ids == null) return <ScheduleItem>[];
 

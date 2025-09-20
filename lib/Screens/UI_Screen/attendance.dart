@@ -4,6 +4,9 @@ import 'package:project_agila/Service_Modules/Attendance/attendance_controller.d
 import 'package:project_agila/Service_Modules/Attendance/attendance_UI.dart';
 import 'package:project_agila/Service_Modules/Attendance/attendance_service.dart';
 
+const kAgilaBlue = Color(0xFF0058CE);
+const kAgilaGold = Color(0xFFC88000);
+
 void main() => runApp(const MyApp());
 
 class MyApp extends StatelessWidget {
@@ -16,7 +19,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: kAgilaBlue),
         textTheme: GoogleFonts.poppinsTextTheme(),
-        scaffoldBackgroundColor: kBg,
+        scaffoldBackgroundColor: Color(0xFFFFFFFF),
       ),
       home: const AttendanceScreen(),
     );
@@ -54,23 +57,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final c = ctrl.state.counts;
 
     return Scaffold(
-      backgroundColor: kBg,
+      //backgroundColor: kBg,
       appBar: AppBar(
         automaticallyImplyLeading: false,
         centerTitle: false,
         elevation: 0,
-        backgroundColor: kBg,
+        //backgroundColor: kBg,
         title: Text(
           "Attendance",
-          style: GoogleFonts.poppins(
-            color: kAgilaBlue,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: Theme.of(context).colorScheme.primary,
             fontSize: 24,
             fontWeight: FontWeight.w700,
           ),
         ),
         actions: [
           PopupMenuButton<ViewMode>(
-            color: Color(0xFFFFFFFF),
             tooltip: "Switch view",
             initialValue: ctrl.state.mode,
             onSelected: ctrl.setMode,
@@ -82,12 +84,12 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Row(children: [
-                const Icon(Icons.calendar_today_outlined, color: kAgilaBlue),
+                Icon(Icons.calendar_today_outlined, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 4),
                 Text(
                   ctrl.state.mode.name.substring(0,1).toUpperCase() + ctrl.state.mode.name.substring(1),
                 ),
-                const Icon(Icons.arrow_drop_down, color: kAgilaBlue),
+                Icon(Icons.arrow_drop_down, color: Theme.of(context).colorScheme.primary),
               ]),
             ),
           ),
@@ -100,6 +102,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               PeriodSwitcher(
+
                 label: ctrl.periodLabel(),
                 onPrev: () => ctrl.shiftPeriod(-1),
                 onNext: () => ctrl.shiftPeriod(1),
@@ -107,6 +110,7 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               if (ctrl.state.loading) const LinearProgressIndicator(minHeight: 2),
               if (ctrl.state.error != null)
                 Container(
+                  color: Theme.of(context).colorScheme.surface,
                   margin: const EdgeInsets.only(top: 8),
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(

@@ -5,8 +5,8 @@ import 'package:project_agila/Screens/UI_Screen/profile.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Screens/UI_Screen/request.dart';
 import 'package:project_agila/Screens/UI_Screen/attendance.dart';
-// NEW: schedule tab for staff roles
 import 'package:project_agila/Screens/UI_Screen/schedule.dart';
+import 'package:project_agila/Screens/Theme/agila_theme.dart';
 
 class MainLayout extends StatefulWidget {
   final String role;
@@ -47,14 +47,14 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFFFFFFF),
       body: _screens[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        backgroundColor: const Color(0xFFF6F7FB),
-        selectedItemColor: const Color(0xFF0058CE),
-        unselectedItemColor: const Color(0xFFC88000),
+        selectedItemColor: cs.primary,
+        unselectedItemColor: cs.secondary,
         selectedLabelStyle: GoogleFonts.poppins(),
         unselectedLabelStyle: GoogleFonts.poppins(),
         onTap: (index) => setState(() => _currentIndex = index),

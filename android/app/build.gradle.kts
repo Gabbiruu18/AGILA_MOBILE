@@ -6,6 +6,8 @@ plugins {
 }
 
 dependencies {
+    // ✅ Add this using 'add' in KTS
+    add("coreLibraryDesugaring", "com.android.tools:desugar_jdk_libs:2.1.2")
     implementation(platform("com.google.firebase:firebase-bom:33.9.0"))
 
     implementation("com.google.firebase:firebase-analytics")
@@ -17,6 +19,7 @@ dependencies {
     //implementation ("com.google.mediapipe:solution-core:latest.release")
     //implementation ("com.google.mediapipe:face_detection:latest.release")
     implementation ("com.google.mediapipe:tasks-vision:0.10.21")
+    coreLibraryDesugaring ("com.android.tools:desugar_jdk_libs:2.1.2")
 
 }
 
@@ -31,6 +34,7 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {

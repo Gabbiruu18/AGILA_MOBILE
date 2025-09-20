@@ -88,7 +88,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
       body: SafeArea(
         child: controller.isLoading
             ? const Center(child: CircularProgressIndicator())

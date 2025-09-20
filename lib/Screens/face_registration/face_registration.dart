@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -69,11 +70,18 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
             () => setState(() {}),
       );
       final response = await http.Response.fromStream(respStream);
-      if (response.statusCode == 200) {
+      final body = response.body;
+      Map<String, dynamic> _data = {};
+      try { _data = jsonDecode(body); } catch (_) {}
+      if (response.statusCode == 200 && _data['status'] == 'enrolled') {
+        // Cleanly dispose camera before navigation
+        _logic.dispose();
+        if (!mounted) return;
         Navigator.pushReplacementNamed(context, '/registration-processing');
       } else {
+        final msg = _data['message'] ?? _data['reason'] ?? _data['status'] ?? body;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Upload failed: ${response.body}')),
+          SnackBar(content: Text('Enrollment failed: $msg')),
         );
       }
     } catch (e) {
@@ -116,6 +124,16 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // ---- safe instruction index to avoid RangeError ----
+    final int _totalAngles = _angleInstructions.length;
+    final bool _atEnd = _logic.currentAngleIndex >= _totalAngles;
+    final int _safeIndex = _atEnd
+        ? (_totalAngles == 0 ? 0 : _totalAngles - 1)
+        : _logic.currentAngleIndex;
+    final String _currentInstructionText = _logic.readyToUpload
+        ? 'All angles captured'
+        : (_totalAngles > 0 ? _angleInstructions[_safeIndex] : '');
+
     final args = ModalRoute.of(context)!.settings.arguments as Map;
     uid = args['uid'];
     name = args['name'];
@@ -124,7 +142,6 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
     final boxSize = MediaQuery.of(context).size.width * 0.7;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.only(bottom: 24),
@@ -132,7 +149,7 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               IconButton(
-                icon: const Icon(Icons.arrow_back, size: 28, color: Colors.black),
+                icon: const Icon(Icons.arrow_back, size: 28),
                 onPressed: () => Navigator.pop(context),
               ),
               Center(
@@ -140,11 +157,11 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
                   textAlign: TextAlign.center,
                   text: TextSpan(
                     style: GoogleFonts.poppins(fontSize: 32, fontWeight: FontWeight.bold),
-                    children: const [
-                      TextSpan(text: 'F', style: TextStyle(color: Color(0xFFFBB43C))),
-                      TextSpan(text: 'acial\n', style: TextStyle(color: Color(0xFF0058CE))),
-                      TextSpan(text: 'R', style: TextStyle(color: Color(0xFFFBB43C))),
-                      TextSpan(text: 'egistration', style: TextStyle(color: Color(0xFF0058CE))),
+                    children: [
+                      TextSpan(text: 'F', style: TextStyle(color: Theme.of(context).colorScheme.secondary)),
+                      TextSpan(text: 'acial\n', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
+                      TextSpan(text: 'R', style: TextStyle(color: Theme.of(context).colorScheme.secondary)),
+                      TextSpan(text: 'egistration', style: TextStyle(color: Theme.of(context).colorScheme.primary)),
                     ],
                   ),
                 ),
@@ -191,11 +208,11 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
                       Positioned(
                         bottom: -40,
                         child: Text(
-                          _angleInstructions[_logic.currentAngleIndex],
+                          _currentInstructionText,
                           style: GoogleFonts.poppins(
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
-                            color: const Color(0xFF0058CE),
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                       ),
@@ -205,11 +222,11 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
               const SizedBox(height: 16),
               Center(
                 child: Text(
-                  _angleInstructions[_logic.currentAngleIndex],
+                  _currentInstructionText,
                   style: GoogleFonts.poppins(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0058CE),
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
@@ -222,7 +239,7 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
                           ? null
                           : (_readyToUpload ? _uploadImages : _startAngleLoop),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF0058CE),
+                        backgroundColor: Theme.of(context).colorScheme.primary,
                         padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
@@ -230,7 +247,7 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
                         _logic.isUploading
                             ? 'Uploading...'
                             : (_readyToUpload ? 'Next' : 'Start'),
-                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 18),
+                        style: GoogleFonts.poppins(fontSize: 18, color: Colors.white),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -238,11 +255,11 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
                       ElevatedButton(
                         onPressed: _resetCapture,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFBB43C),
+                          backgroundColor: Theme.of(context).colorScheme.secondary,
                           padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         ),
-                        child: Text('Reset', style: GoogleFonts.poppins(color: Colors.white, fontSize: 16)),
+                        child: Text('Reset', style: GoogleFonts.poppins(fontSize: 16)),
                       ),
                   ],
                 ),
@@ -251,7 +268,7 @@ class _FacialRegistrationScreenState extends State<FacialRegistrationScreen> {
               Center(
                 child: Text(
                   'Captured ${_logic.capturedCount} / ${_angleInstructions.length * _photosPerAngle} images',
-                  style: GoogleFonts.poppins(color: Colors.black87, fontSize: 14),
+                  style: GoogleFonts.poppins(fontSize: 14),
                 ),
               ),
               const SizedBox(height: 24),

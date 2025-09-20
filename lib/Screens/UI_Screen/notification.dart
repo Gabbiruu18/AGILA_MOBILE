@@ -11,7 +11,7 @@ class NotificationModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFFF2F5FA),
+      //backgroundColor: const Color(0xFFF2F5FA),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: SizedBox(
         width: 500,

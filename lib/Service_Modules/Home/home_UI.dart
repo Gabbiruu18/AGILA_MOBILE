@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+const kAgilaBlue = Color(0xFF0058CE);
+const kAgilaGold = Color(0xFFC88000);
 
 class AppCard extends StatelessWidget {
   final Widget? title;
@@ -20,7 +21,7 @@ class AppCard extends StatelessWidget {
     final content = <Widget>[
       if (title != null) ...[
         DefaultTextStyle.merge(
-          style: GoogleFonts.poppins(
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontSize: 16,
             fontWeight: FontWeight.w700,
             color: const Color(0xFF0F172A),
@@ -36,9 +37,9 @@ class AppCard extends StatelessWidget {
       margin: margin,
       padding: padding,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Theme.of(context).colorScheme.surfaceContainer,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: Theme.of(context).colorScheme.surface),
         boxShadow: const [
           BoxShadow(blurRadius: 10, offset: Offset(0, 6), color: Color(0x1A000000)),
         ],
@@ -76,6 +77,8 @@ class HeaderBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16),
       child: Column(
@@ -90,15 +93,15 @@ class HeaderBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(greeting,
-                      style: GoogleFonts.poppins(
-                        color: const Color(0xFFC88000),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.secondary,
                         fontSize: 14,
                       )),
                   Text(name,
-                      style: GoogleFonts.poppins(
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF0058CE),
+                        color: Theme.of(context).colorScheme.primary,
                       )),
                 ],
               ),
@@ -107,8 +110,8 @@ class HeaderBar extends StatelessWidget {
                 child: Stack(
                   clipBehavior: Clip.none,
                   children: [
-                    const Icon(Icons.notifications_none,
-                        color: Color(0xFFC88000), size: 30),
+                    Icon(Icons.notifications_none,
+                        color: Theme.of(context).colorScheme.primary, size: 30),
                     if (unreadCount > 0)
                       Positioned(
                         right: -2,
@@ -122,14 +125,14 @@ class HeaderBar extends StatelessWidget {
                           constraints:
                           const BoxConstraints(minWidth: 16, minHeight: 16),
                           child: Center(
-                            child: Text(
-                              unreadCount > 99 ? '99+' : '$unreadCount',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                              child: Text(
+                                unreadCount > 99 ? '99+' : '$unreadCount',
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  color: cs.onPrimary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
                           ),
                         ),
                       ),
@@ -149,7 +152,7 @@ class HeaderBar extends StatelessWidget {
                 // Always show role
                 TagChip(
                   label: role,
-                  color: const Color(0xFF0058CE),
+                  color: Theme.of(context).colorScheme.primary,
                   icon: _isTeacherOrHead ? Icons.school : Icons.person,
                 ),
 
@@ -158,7 +161,7 @@ class HeaderBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   TagChip(
                     label: departmentName!,
-                    color: const Color(0xFFC88000),
+                    color: Theme.of(context).colorScheme.secondary,
                     icon: Icons.domain, // or Icons.apartment
                   ),
                 ],
@@ -168,7 +171,7 @@ class HeaderBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   TagChip(
                     label: courseName!,
-                    color: const Color(0xFFC88000),
+                    color: Theme.of(context).colorScheme.secondary,
                     icon: Icons.menu_book,
                   ),
                 ],
@@ -205,13 +208,13 @@ class TagChip extends StatelessWidget {
       child: Row(
         children: [
           if (icon != null) ...[
-            Icon(icon, size: 14, color: Colors.white),
+            Icon(icon, size: 14, color: Theme.of(context).colorScheme.onPrimary),
             const SizedBox(width: 6),
           ],
           Text(
             label,
-            style: GoogleFonts.poppins(
-              color: Colors.white,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onPrimary,
               fontSize: 12,
               fontWeight: FontWeight.w600,
             ),
@@ -236,17 +239,17 @@ class NotesPreviewCard extends StatelessWidget {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.start,
         children: [
-          const Text('Your Notes'),
+          Text('Your Notes'),
           IconButton(
             onPressed: onEdit,
-            icon: const Icon(Icons.edit, color: Color(0xFF0058CE)),
+            icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
             tooltip: 'Edit notes',
           ),
         ],
       ),
       child: Text(
         truncated.isEmpty ? 'Tap the pencil to add a note' : truncated,
-        style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0F172A)),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, color: const Color(0xFF0F172A)),
       ),
     );
   }
@@ -275,7 +278,7 @@ class NotesDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text("Your Notes"),
+      title: Text("Your Notes"),
       content: TextField(
         controller: controller,
         maxLines: 5,
@@ -287,15 +290,15 @@ class NotesDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: onReset,
-          child: const Text("Reset", style: TextStyle(color: Colors.red)),
+          child: Text("Reset", style: TextStyle(color: Colors.red)),
         ),
         TextButton(
           onPressed: onCancel,
-          child: const Text("Cancel"),
+          child: Text("Cancel"),
         ),
         ElevatedButton(
           onPressed: onSave,
-          child: const Text("Save"),
+          child: Text("Save"),
         ),
       ],
     );
@@ -336,16 +339,16 @@ class TeacherScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _SideBorderCard(
-      sideColor: const Color(0xFF0058CE),
+      sideColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: GoogleFonts.poppins(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF0058CE),
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -357,7 +360,7 @@ class TeacherScheduleCard extends StatelessWidget {
               child: Center(
                 child: Text(
                   'No schedules for today',
-                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, color: Colors.grey),
                 ),
               ),
             )
@@ -369,9 +372,9 @@ class TeacherScheduleCard extends StatelessWidget {
                 margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,7 +385,7 @@ class TeacherScheduleCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             it.subjectName,
-                            style: GoogleFonts.poppins(
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -390,11 +393,11 @@ class TeacherScheduleCard extends StatelessWidget {
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
+                            Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
                             const SizedBox(width: 6),
                             Text(
                               '${it.startTime} — ${it.endTime}',
-                              style: GoogleFonts.poppins(fontSize: 12),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12),
                             ),
                           ],
                         ),
@@ -437,17 +440,19 @@ class StudentScheduleCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return _SideBorderCard(
-      sideColor: const Color(0xFF0058CE),
+      sideColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: GoogleFonts.poppins(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontSize: 16,
               fontWeight: FontWeight.bold,
-              color: const Color(0xFF0058CE),
+              color: Theme.of(context).colorScheme.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -459,7 +464,7 @@ class StudentScheduleCard extends StatelessWidget {
               child: Center(
                 child: Text(
                   'No schedules for today',
-                  style: GoogleFonts.poppins(fontSize: 14, color: Colors.grey),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, color: Colors.grey),
                 ),
               ),
             )
@@ -470,9 +475,9 @@ class StudentScheduleCard extends StatelessWidget {
                 margin: EdgeInsets.only(bottom: i == items.length - 1 ? 0 : 12),
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF8FAFC),
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                  border: Border.all(color: Theme.of(context).colorScheme.primary),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,7 +487,7 @@ class StudentScheduleCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             it.subjectName,
-                            style: GoogleFonts.poppins(
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
                             ),
@@ -490,11 +495,11 @@ class StudentScheduleCard extends StatelessWidget {
                         ),
                         Row(
                           children: [
-                            const Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
+                            Icon(Icons.schedule, size: 16, color: Color(0xFF64748B)),
                             const SizedBox(width: 6),
                             Text(
                               '${it.startTime} — ${it.endTime}',
-                              style: GoogleFonts.poppins(fontSize: 12),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 12),
                             ),
                           ],
                         ),
@@ -545,6 +550,7 @@ class TopBoxes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
+
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
         children: [
@@ -552,16 +558,16 @@ class TopBoxes extends StatelessWidget {
           Expanded(
             child: _SideBorderCard(
               height: 140, // equal height
-              sideColor: const Color(0xFF0058CE),
+              sideColor: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(monthYear, style: GoogleFonts.poppins(fontWeight: FontWeight.bold)),
+                  Text(monthYear, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.primary,fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
                   Text(dayNumber,
-                      style: GoogleFonts.poppins(fontSize: 22, fontWeight: FontWeight.bold)),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.primary,fontSize: 22, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text(day, style: GoogleFonts.poppins()),
+                  Text(day, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.primary,)),
                 ],
               ),
             ),
@@ -570,7 +576,7 @@ class TopBoxes extends StatelessWidget {
           Expanded(
             child: _SideBorderCard(
               height: 140,
-              sideColor: const Color(0xFF0058CE),
+              sideColor: Theme.of(context).colorScheme.surfaceContainerHighest,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
@@ -581,9 +587,10 @@ class TopBoxes extends StatelessWidget {
                     children: [
                       Text(
                         'Notes',
-                        style: GoogleFonts.poppins(
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
+                          color: Theme.of(context).colorScheme.primary,
                         ),
                       ),
                       IconButton(
@@ -593,7 +600,7 @@ class TopBoxes extends StatelessWidget {
                           horizontal: -4, vertical: -4,
                         ),
                         onPressed: onEditNotes,
-                        icon: const Icon(Icons.edit, size: 18, color: Color(0xFF0058CE)),
+                        icon: Icon(Icons.edit, size: 18, color: Theme.of(context).colorScheme.primary),
                         tooltip: 'Edit notes',
                       ),
                     ],
@@ -604,7 +611,7 @@ class TopBoxes extends StatelessWidget {
                       (noteText.trim().isEmpty || noteText == 'Tap to write notes')
                           ? 'Tap the pencil to add a note'
                           : noteText,
-                      style: GoogleFonts.poppins(fontSize: 13),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 13),
                       maxLines: 5,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -630,20 +637,20 @@ class _InfoChip extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: const Color(0xFFEFF6FF),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFBFDBFE)),
+        border: Border.all(color: Theme.of(context).colorScheme.primary),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 14, color: const Color(0xFF2563EB)),
+          Icon(icon, size: 14, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 6),
           Text(
             label,
-            style: GoogleFonts.poppins(
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               fontSize: 12,
-              color: const Color(0xFF1E3A8A),
+              color: Theme.of(context).colorScheme.primary,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -672,7 +679,7 @@ class _SideBorderCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white, // for shadow
+        color: Theme.of(context).colorScheme.surface, // for shadow
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: sideColor, width: 2),
         boxShadow: const [

@@ -60,7 +60,7 @@ class OpeningScreenState extends State<OpeningScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+      //backgroundColor: const Color(0xFFF6F7FB),
       body: Center(
         child: FadeTransition(
           opacity: _fadeAnimation,

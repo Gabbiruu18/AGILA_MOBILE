@@ -1,8 +1,13 @@
 // Screens/UI_Screen/profile.dart (or Service_Modules/Profile/profile.dart if that's your path)
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:project_agila/Screens/UI_Screen/settings.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_controller.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_UI.dart';
+
+
+const kAgilaBlue = Color(0xFF0058CE);
+const kAgilaGold = Color(0xFFC88000);
 
 class ProfileScreen extends StatefulWidget {
   final String role;
@@ -72,11 +77,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isLoading = controller.isLoading;
     final data = controller.profileData;
     final roleRaw = controller.role;
+    final cs = Theme.of(context).colorScheme;
+
 
 
     if (isLoading) {
-      return const Scaffold(
-        backgroundColor: Color(0xFFF6F7FB),
+      return Scaffold(
         body: Center(child: CircularProgressIndicator()),
       );
     }
@@ -102,48 +108,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7FB),
+
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        backgroundColor: Colors.transparent,
+        //backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
-        foregroundColor: kAgilaBlue,
-        title: Text('Profile',
-            style: GoogleFonts.poppins(fontSize: 24, fontWeight: FontWeight.w700)),
-        // NEW: settings button (top-right)
+        foregroundColor: Theme.of(context).colorScheme.primary,
+        title: Text('Profile', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 24, fontWeight: FontWeight.w700)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.settings_outlined),
+            icon: Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: () {
-              //route to your settings screen
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Settings tapped')),
-              );
+              showSettingsSheet(context);
             },
           ),
         ],
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: 20),
+        padding: const EdgeInsets.symmetric(vertical: 5),
         children: [
           if (controller.isSyncing)
-            const Padding(
+            Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: LinearProgressIndicator(minHeight: 2),
             ),
-          const SizedBox(height: 12),
+          SizedBox(height: 12),
 
-          // Header (kept your visual style; now also shows photo if any)
+          // Header
           ProfileHeaderCard(
             name: controller.displayName,
             roleLabel: roleLabel,
             subtitle: isStaff ? staffheaderSubtitle : studheaderSubtitle,
-            imageUrl: controller.profileImageUrl, // NEW
+            imageUrl: controller.profileImageUrl,
             onEditPhoto: () async => controller.pickAndUploadImage(context),
+            subtitleColor: Theme.of(context).colorScheme.primary,
+
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // Personal Info
           InfoCard(
@@ -164,7 +167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // School / Work Info
           InfoCard(
@@ -193,33 +196,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   (data['subjects'] as List).isNotEmpty)
                 ListTile(
                   dense: true,
-                  leading: const Icon(Icons.menu_book_outlined, color: kAgilaBlue),
+                  leading: Icon(Icons.menu_book_outlined, color: Theme.of(context).colorScheme.primary),
                   title: Text('Subjects Handled',
-                      style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
                   subtitle: Text((data['subjects'] as List).join(' • '),
-                      style: GoogleFonts.poppins()),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith()),
                 ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
 
           // Tools (show for staff or everyone if you prefer)
-          InfoCard(
+          /*InfoCard(
             title: 'Tools',
             children: [
               ListTile(
                 dense: true,
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: Text('Logout',
-                    style: GoogleFonts.poppins(
-                        color: Colors.red, fontWeight: FontWeight.w600)),
+                leading: Icon(Icons.logout, color: Colors.red),
+                title: Text(
+                  'Logout',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                ),
                 onTap: () async {
-                  await controller.logout(context);
+                  await controller.logout(context); // controller handles confirm + sign out
                 },
+
               ),
+
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: 8),*/
         ],
       ),
     );

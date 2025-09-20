@@ -6,6 +6,7 @@ import 'home_UI.dart';
 class HomeController extends ChangeNotifier {
   final HomeService _service;
   HomeController({HomeService? service}) : _service = service ?? HomeService();
+  bool _isDisposed = false;
 
   // ---------- Identity ----------
   late String role;
@@ -46,7 +47,7 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // 1) Load user details for header chips (names only)
+      //Load user details for header chips
       final user = await _service.fetchUserDetails(role: role, uid: uid) ?? {};
       courseRaw     = user['courseName']?.toString();
       departmentRaw = user['departmentName']?.toString();
@@ -64,7 +65,7 @@ class HomeController extends ChangeNotifier {
         notifyListeners();
       });
 
-      // 4) Load today's schedules (uses `section` doc ID under the hood)
+      //Load today's schedules
       await initTodaySchedulesAuto();
     } catch (_) {
       // ignore; optional logging
@@ -74,9 +75,9 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  /// Loads today's schedules via the `section` doc ID path.
+  //Loads today's schedules via the `section` doc ID path.
   Future<void> initTodaySchedulesAuto() async {
-    if (isLoadingSchedules) return;
+     if (isLoadingSchedules) return;
     isLoadingSchedules = true;
     schedulesError = null;
     notifyListeners();
@@ -124,8 +125,16 @@ class HomeController extends ChangeNotifier {
     }
   }
 
+  @protected
+  @override
+  void notifyListeners() {
+    if (_isDisposed) return; // ✅ no-op after dispose
+    super.notifyListeners();
+  }
+
   @override
   void dispose() {
+    _isDisposed = true;
     _unreadSub?.cancel();
     super.dispose();
   }

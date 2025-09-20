@@ -5,6 +5,9 @@ import 'package:flutter/material.dart';
 import 'profile_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const kAgilaBlue = Color(0xFF0058CE);
+const kAgilaGold = Color(0xFFC88000);
+
 class ProfileController extends ChangeNotifier {
   final ProfileService _service;
   ProfileController({ProfileService? service}) : _service = service ?? ProfileService();
@@ -100,15 +103,73 @@ class ProfileController extends ChangeNotifier {
     super.dispose();
   }
 
+  // add inside _ProfileScreenState
+  Future<bool> _confirmLogout(BuildContext ctx) async {
+    final result = await showDialog<bool>(
+      context: ctx,
+      barrierDismissible: false,
+      builder: (dialogCtx) => AlertDialog(
+        //backgroundColor: Color(0xFFFFFFFF),
+        title: Row(
+          children: const [
+            Icon(Icons.logout, color: Color(0xFF9A0017)),
+            SizedBox(width: 8),
+            Text('Confirm logout'),
+          ],
+        ),
+        content: const Text("You'll be signed out of AGILA. Continue?"),
+        actions: [
+          // Cancel (Text color)
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            style: TextButton.styleFrom(
+              foregroundColor: kAgilaBlue, // <- text color
+            ),
+            child: const Text('Cancel'),
+          ),
+          // Confirm (FilledButton color)
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: FilledButton.styleFrom(
+              backgroundColor: Color(0xFF9A0017), // <- filled button color
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+
   Future<void> logout(BuildContext context) async {
-    await _service.signOut();
-    if (context.mounted) {
-      Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Signed out')),
-      );
+    // 1) Ask first
+    final ok = await _confirmLogout(context);
+    if (ok != true) return;
+
+    // 2) Proceed with sign out
+    _setBusy(true);
+    try {
+      await _service.signOut();
+
+      if (context.mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Signed out')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Sign out failed: $e')),
+        );
+      }
+    } finally {
+      _setBusy(false);
     }
   }
+
 
 
   // Keep legacy method signature used by UI pencil
@@ -126,7 +187,7 @@ class ProfileController extends ChangeNotifier {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: Color(0xFFFFFFFF),
+        //backgroundColor: Color(0xFFFFFFFF),
         title: const Text('Use this photo?'),
         content: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -136,7 +197,7 @@ class ProfileController extends ChangeNotifier {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(
-              foregroundColor: const Color(0xFF0058CE), // kAgilaBlue
+              foregroundColor: kAgilaBlue, // kAgilaBlue
             ),
             child: const Text('Cancel'),
           ),
@@ -144,7 +205,7 @@ class ProfileController extends ChangeNotifier {
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
               // fill + text color
-              backgroundColor: const Color(0xFFC88000), // kAgilaGold
+              backgroundColor: kAgilaGold, // kAgilaGold
               foregroundColor: Colors.white,
             ),
             child: const Text('Confirm'),

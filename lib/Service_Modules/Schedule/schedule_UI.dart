@@ -74,7 +74,6 @@ class SessionCard extends StatelessWidget {
     final chip = _statusColors(status);
 
     return Material(
-      color: Colors.white,
       borderRadius: BorderRadius.circular(12),
       child: Container(
         decoration: BoxDecoration(
@@ -107,17 +106,17 @@ class SessionCard extends StatelessWidget {
                     ]),
                     const SizedBox(height: 6),
                     Row(children: [
-                      const Icon(Icons.group, size: 16, color: Colors.black45),
+                      const Icon(Icons.group, size: 16),
                       const SizedBox(width: 4),
                       Expanded(child: Text(session.section, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins())),
                       const SizedBox(width: 8),
-                      const Icon(Icons.meeting_room, size: 16, color: Colors.black45),
+                      const Icon(Icons.meeting_room, size: 16),
                       const SizedBox(width: 4),
                       Text(session.room, style: GoogleFonts.poppins()),
                       const SizedBox(width: 8),
-                      const Icon(Icons.access_time, size: 14, color: Colors.black38),
+                      const Icon(Icons.access_time, size: 14),
                       const SizedBox(width: 2),
-                      Text(time, style: GoogleFonts.poppins(color: Colors.black54)),
+                      Text(time, style: GoogleFonts.poppins()),
                     ]),
                     const SizedBox(height: 10),
                     SizedBox(
@@ -151,7 +150,7 @@ class MiniSessionTile extends StatelessWidget {
         '${_d2(session.startMinutes ~/ 60)}:${_d2(session.startMinutes % 60)}'
         '–${_d2(session.endMinutes ~/ 60)}:${_d2(session.endMinutes % 60)}';
     return Material(
-      color: Colors.white,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
         onTap: onTap,
@@ -169,13 +168,13 @@ class MiniSessionTile extends StatelessWidget {
                   Text(session.subject, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
                   const SizedBox(height: 2),
                   Row(children: [
-                    Expanded(child: Text(session.section, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(color: Colors.black87))),
+                    Expanded(child: Text(session.section, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.surface))),
                     const SizedBox(width: 6),
-                    Text(time, style: GoogleFonts.poppins(color: Colors.black54)),
+                    Text(time, style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.surface)),
                   ]),
                   const SizedBox(height: 2),
                   Row(children: [
-                    const Icon(Icons.meeting_room, size: 14, color: Colors.black45),
+                    const Icon(Icons.meeting_room, size: 14),
                     const SizedBox(width: 4),
                     Text(session.room, style: GoogleFonts.poppins()),
                     if (isToday) ...[const SizedBox(width: 8), const NowDot()],
@@ -198,11 +197,11 @@ class EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Column(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.calendar_today, size: 64, color: Colors.black26),
+        const Icon(Icons.calendar_today, size: 64),
         const SizedBox(height: 12),
         Text(title, style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600)),
         const SizedBox(height: 6),
-        Text(message, style: GoogleFonts.poppins(color: Colors.black54)),
+        Text(message, style: GoogleFonts.poppins(color: Theme.of(context).colorScheme.surface)),
       ]),
     );
   }

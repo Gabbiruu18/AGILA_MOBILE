@@ -1,13 +1,11 @@
 // Service_Modules/Profile/profile_UI.dart
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-
 const kAgilaBlue = Color(0xFF0058CE);
 const kAgilaGold = Color(0xFFC88000);
 
 class PrimaryButton extends StatelessWidget {
   final String text;
-  final Color color;
+  final Color? color; // make optional
   final VoidCallback onPressed;
   final EdgeInsetsGeometry padding;
   final BorderRadius radius;
@@ -15,7 +13,7 @@ class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
     required this.text,
-    required this.color,
+    this.color,
     required this.onPressed,
     this.padding = const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
     this.radius = const BorderRadius.all(Radius.circular(8)),
@@ -23,40 +21,49 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return ElevatedButton(
       onPressed: onPressed,
       style: ElevatedButton.styleFrom(
-        backgroundColor: color,
+        backgroundColor: color ?? cs.primary,
         padding: padding,
         shape: RoundedRectangleBorder(borderRadius: radius),
       ),
-      child: Text(text, style: GoogleFonts.poppins(color: Colors.white, fontSize: 16)),
+      child: Text(
+        text,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: cs.onPrimary, // text for primary-colored button
+          fontSize: 16,
+        ),
+      ),
     );
   }
 }
 
+
 class DetailsCard extends StatelessWidget {
   final List<Widget> children;
-
   const DetailsCard({super.key, required this.children});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final cs = Theme.of(context).colorScheme;
+    return Card(
       margin: const EdgeInsets.symmetric(horizontal: 24),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.grey[300],
-        border: Border.all(color: kAgilaBlue, width: 2),
+      // no color: uses CardTheme.color (we set it to neutral in your theme)
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withOpacity(0.6), width: 1.2),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: children,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: children),
       ),
     );
   }
 }
+
 
 class InfoCard extends StatelessWidget {
   final String title;
@@ -65,21 +72,28 @@ class InfoCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Card(
-      color: Colors.white,
+      // color: cs.surface, // optional; CardTheme already supplies neutral surface
       margin: const EdgeInsets.symmetric(horizontal: 16),
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: kAgilaBlue, width: 2),
         borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withOpacity(0.6), width: 1.2),
       ),
       child: Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title,
-                style: GoogleFonts.poppins(
-                    fontWeight: FontWeight.w600, fontSize: 16, color: kAgilaBlue)),
+            Text(
+              title,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                // use primary if you want colored title that adapts per theme
+                color: cs.primary,
+              ),
+            ),
             const SizedBox(height: 8),
             ...children,
           ],
@@ -88,6 +102,7 @@ class InfoCard extends StatelessWidget {
     );
   }
 }
+
 
 class ReadonlyTile extends StatelessWidget {
   final IconData icon;
@@ -99,9 +114,9 @@ class ReadonlyTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      leading: Icon(icon, color: kAgilaBlue),
-      title: Text(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-      subtitle: Text(value ?? '—', style: GoogleFonts.poppins()),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      subtitle: Text(value ?? '—', style: Theme.of(context).textTheme.bodyMedium?.copyWith()),
     );
   }
 }
@@ -125,11 +140,11 @@ class EditableTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       dense: true,
-      leading: Icon(icon, color: kAgilaBlue),
-      title: Text(label, style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-      subtitle: Text(value ?? '—', style: GoogleFonts.poppins()),
+      leading: Icon(icon, color: Theme.of(context).colorScheme.primary),
+      title: Text(label, style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+      subtitle: Text(value ?? '—', style: Theme.of(context).textTheme.bodyMedium?.copyWith()),
       trailing: IconButton(
-        icon: const Icon(Icons.edit, color: kAgilaBlue),
+        icon: Icon(Icons.edit, color: Theme.of(context).colorScheme.primary),
         tooltip: 'Edit',
         onPressed: onEdit,
       ),
@@ -149,20 +164,20 @@ class ProfileAvatar extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 48,
-          backgroundColor: kAgilaBlue.withOpacity(.08),
+          backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(.08),
           backgroundImage: (imageUrl != null && imageUrl!.isNotEmpty) ? NetworkImage(imageUrl!) : null,
           child: (imageUrl == null || imageUrl!.isEmpty)
-              ? Icon(Icons.person, color: kAgilaBlue.withOpacity(.6), size: 42)
+              ? Icon(Icons.person, color: Theme.of(context).colorScheme.primary.withOpacity(.6), size: 42)
               : null,
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: 12),
         ElevatedButton(
           onPressed: onUpload,
           style: ElevatedButton.styleFrom(
-            backgroundColor: kAgilaGold,
+            backgroundColor: Theme.of(context).colorScheme.secondary,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
           ),
-          child: Text('Upload Profile Photo', style: GoogleFonts.poppins(color: Colors.white)),
+          child: Text('Upload Profile Photo', style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
         ),
       ],
     );
@@ -175,6 +190,8 @@ class ProfileHeaderCard extends StatelessWidget {
   final String? subtitle;
   final VoidCallback onEditPhoto;
   final String? imageUrl; // NEW: optional URL for the avatar
+  final Color? subtitleColor; // ✅ NEW
+
 
   const ProfileHeaderCard({
     super.key,
@@ -183,6 +200,9 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.subtitle,
     required this.onEditPhoto,
     this.imageUrl,
+    this.subtitleColor, // ✅ NEW
+
+
   });
 
   String get initials {
@@ -194,12 +214,15 @@ class ProfileHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+
     return Card(
-      color: Colors.white,
+      // color: cs.surface, // optional; let CardTheme handle it
       margin: const EdgeInsets.symmetric(horizontal: 16),
       shape: RoundedRectangleBorder(
-        side: const BorderSide(color: kAgilaBlue, width: 2),
         borderRadius: BorderRadius.circular(14),
+        side: BorderSide(color: cs.outlineVariant.withOpacity(0.6), width: 1.2),
       ),
       child: Padding(
         padding: const EdgeInsets.all(18),
@@ -210,30 +233,32 @@ class ProfileHeaderCard extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 36,
-                  backgroundColor: kAgilaGold.withOpacity(.15),
+                  backgroundColor: cs.secondary.withOpacity(.15),
                   backgroundImage: (imageUrl != null && imageUrl!.isNotEmpty)
                       ? NetworkImage(imageUrl!)
                       : null,
                   child: (imageUrl == null || imageUrl!.isEmpty)
-                      ? Text(initials,
-                      style: GoogleFonts.poppins(
-                          fontSize: 22, fontWeight: FontWeight.w700))
+                      ? Text(
+                    initials,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontSize: 22, fontWeight: FontWeight.w700,
+                    ),
+                  )
                       : null,
                 ),
-                // Pencil edit button over the avatar (top-right)
                 Positioned(
                   top: -4,
                   right: -4,
                   child: Material(
-                    color: Colors.white,
+                    color: cs.surface, // not onPrimary; matches card
                     shape: const CircleBorder(),
                     elevation: 2,
                     child: InkWell(
-                      customBorder: const CircleBorder(),
+                      customBorder: CircleBorder(),
                       onTap: onEditPhoto,
-                      child: const Padding(
+                      child: Padding(
                         padding: EdgeInsets.all(6),
-                        child: Icon(Icons.edit, size: 16, color: kAgilaBlue),
+                        child: Icon(Icons.edit, size: 16, color: Theme.of(context).colorScheme.primary), // inherits iconTheme color
                       ),
                     ),
                   ),
@@ -245,7 +270,6 @@ class ProfileHeaderCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Name + role chip
                   Row(
                     children: [
                       Expanded(
@@ -253,32 +277,35 @@ class ProfileHeaderCard extends StatelessWidget {
                           name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.poppins(
-                              fontSize: 18, fontWeight: FontWeight.w700),
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontSize: 18, fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: kAgilaBlue.withOpacity(.08),
-                          border: Border.all(color: kAgilaBlue, width: 1),
+                          color: cs.primary.withOpacity(.08),
+                          border: Border.all(color: cs.primary, width: 1),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           roleLabel,
-                          style: GoogleFonts.poppins(
-                              fontSize: 12, color: kAgilaBlue, fontWeight: FontWeight.w600),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontSize: 12, color: cs.primary, fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 4),
-                  if ((subtitle ?? '').isNotEmpty)
+                  if (subtitle!.isNotEmpty)
                     Text(
                       subtitle!,
-                      style: GoogleFonts.poppins(color: Colors.black.withOpacity(.65)),
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: subtitleColor ?? cs.onSurface.withOpacity(.65), // ✅ color override
+                      ),
                     ),
                 ],
               ),
