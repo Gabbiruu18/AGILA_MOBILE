@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../Utils/biometric_util.dart';
-import '../Services/auth_service.dart';
+import '../../Service_Modules/Login/auth_m.dart';
+import '../../Utils/biometric_util.dart';
 import 'terms.dart';
 
 class QuickLoginScreen extends StatefulWidget {
@@ -19,6 +19,8 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   String displayName = '';
   bool _termsAccepted = false;
   TextEditingController pinController = TextEditingController();
+
+
 
   @override
   void initState() {
@@ -43,19 +45,87 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
 
   Future<void> _fetchUserDetailsFromFirestore(String email) async {
-    final snapshot = await FirebaseFirestore.instance
-        .collectionGroup('accounts')
-        .where('email', isEqualTo: email)
-        .limit(1)
-        .get();
+    try {
+      final db = FirebaseFirestore.instance;
 
-    if (snapshot.docs.isNotEmpty) {
-      final data = snapshot.docs.first.data();
+      // 1) Try emailLower (case-insensitive) in collectionGroup
+      QuerySnapshot<Map<String, dynamic>> snap;
+      try {
+        snap = await db
+            .collectionGroup('accounts')
+            .where('emailLower', isEqualTo: email.toLowerCase())
+            .limit(1)
+            .get();
+      } on FirebaseException catch (e) {
+        // If an index is required or field missing, fall back to 'email'
+        // debugPrint('emailLower query failed: $e');
+        snap = await db
+            .collectionGroup('accounts')
+            .where('email', isEqualTo: email)
+            .limit(1)
+            .get();
+      }
+
+      // 2) If still empty, probe known roles directly (no collectionGroup needed)
+      if (snap.docs.isEmpty) {
+        const roles = ['student', 'teacher', 'program_head', 'academic_head'];
+        for (final role in roles) {
+          final q = await db
+              .collection('users').doc(role)
+              .collection('accounts')
+              .where('email', isEqualTo: email)
+              .limit(1)
+              .get();
+          if (q.docs.isNotEmpty) {
+            snap = q;
+            break;
+          }
+        }
+      }
+
+      if (snap.docs.isEmpty) {
+        if (!mounted) return;
+        setState(() => displayName = ''); // nothing found
+        return;
+      }
+
+      final data = snap.docs.first.data();
+
+      // Helper to safely pick a string from possible field names
+      String? pick(List<String> keys) {
+        for (final k in keys) {
+          final v = data[k];
+          if (v is String && v.trim().isNotEmpty) return v.trim();
+        }
+        return null;
+      }
+
+      final disp  = pick(['displayName', 'display_name', 'fullName', 'full_name', 'name']);
+      final first = pick(['firstName', 'first_name', 'firstname', 'givenName', 'given_name']);
+      final last  = pick(['lastName', 'last_name', 'lastname', 'familyName', 'family_name']);
+
+      String composed = disp ?? [first, last].where((s) => s != null && s.isNotEmpty).join(' ').trim();
+      if (composed.isEmpty) {
+        // last resort: show the local part of the email
+        composed = email.split('@').first;
+      }
+
+      if (!mounted) return;
       setState(() {
-        displayName = data['firstName'] ?? '';
+        displayName = composed;
+      });
+    } catch (e) {
+      // debugPrint('Fetch quick-login name failed: $e');
+      if (!mounted) return;
+      setState(() {
+        // still show something instead of blank
+        displayName = email.split('@').first;
       });
     }
   }
+
+
+
 
   Future<void> _clearRememberedUser() async {
     final prefs = await SharedPreferences.getInstance();
@@ -178,10 +248,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     );
   }
 
-
-
-
-
   void _showTermsDialog() {
     showDialog(
       context: context,
@@ -201,8 +267,9 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
+      //backgroundColor: const Color(0xFFF6F7FB),
       body: Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0),
@@ -235,32 +302,38 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
               Text(
                 'AI-Driven General Identification and Logging Attendance',
                 textAlign: TextAlign.center,
-                style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0045A2)),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 14, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 32),
 
               Text(
                 greeting,
-                style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 20, fontWeight: FontWeight.w700),
               ),
               const SizedBox(height: 8),
-              Text(
+              /*Text(
                 displayName,
-                style: GoogleFonts.poppins(fontSize: 16, color: Colors.black87),
-              ),
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 16, fontWeight: FontWeight.w700),
+              ),*/
               const SizedBox(height: 12),
 
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
                 ),
                 child: Text(
                   rememberedEmail ?? 'No email found',
                   textAlign: TextAlign.center,
-                  style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[700]),
+                  style: GoogleFonts.poppins(fontSize: 13),
                 ),
               ),
               const SizedBox(height: 10),
@@ -269,7 +342,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                 onPressed: _clearRememberedUser,
                 child: Text(
                   'Switch Account',
-                  style: GoogleFonts.poppins(color: Colors.black, fontSize: 14),
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w700)
                 ),
               ),
               const SizedBox(height: 20),
@@ -298,7 +371,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                 children: [
                   Checkbox(
                     value: _termsAccepted,
-                    activeColor: const Color(0xFF0058CE),
+                    activeColor: cs.primary,
                     onChanged: _toggleTerms,
                   ),
                   const SizedBox(width: 4),
@@ -316,6 +389,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   }
 
   Widget _buildLoginCard({
+
     required IconData icon,
     required String label,
     required VoidCallback onTap,
@@ -326,11 +400,10 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
         width: 120,
         height: 120,
         decoration: BoxDecoration(
-          color: Colors.grey[200],
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black12,
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -339,12 +412,12 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 36, color: const Color(0xFF0058CE)),
+            Icon(icon, size: 36, color: Theme.of(context).colorScheme.primary),
             const SizedBox(height: 8),
             Text(
               label,
               textAlign: TextAlign.center,
-              style: GoogleFonts.poppins(fontSize: 14, color: Colors.black),
+              style: GoogleFonts.poppins(fontSize: 14),
             ),
           ],
         ),

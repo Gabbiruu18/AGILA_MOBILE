@@ -2,9 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Screens/UI_Screen/bottom_nav.dart';
-import '../Screens/face_registration/face_registration.dart';
-import 'database_service.dart';
+import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
+import 'package:project_agila/Screens/face_registration/face_registration.dart';
+//import 'database_m.dart';
 import 'package:project_agila/Utils/biometric_util.dart';
 
 class AuthServices {

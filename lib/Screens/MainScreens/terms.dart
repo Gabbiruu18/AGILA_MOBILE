@@ -50,6 +50,7 @@ class TermsDialogState extends State<TermsDialog> {
   @override
   Widget build(BuildContext context) {
     return WillPopScope(
+
       onWillPop: () async {
         // Block dialog from closing if not accepted
         return _isChecked;

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../Services/auth_service.dart';
+import '../../Service_Modules/Login/auth_m.dart';
 import 'terms.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -18,6 +18,9 @@ class LoginScreenState extends State<LoginScreen> {
   bool _termsAccepted = false;
   bool _rememberMe = false;
   bool _isLoading = false;
+
+  static const _assetPath = 'assets/images/agila_opening.png';
+
 
   @override
   void initState() {
@@ -54,16 +57,22 @@ class LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFD9D9D9),
+      //backgroundColor: const Color(0xFFF6F7FB),
       body: Stack(
         children: [
           Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 32.0),
+              padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 32),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  RichText(
+                  Image.asset(
+                    _assetPath,
+                    width: 150,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
+                  ),
+                  /*RichText(
                     text: TextSpan(
                       children: [
                         TextSpan(
@@ -84,12 +93,12 @@ class LoginScreenState extends State<LoginScreen> {
                         ),
                       ],
                     ),
-                  ),
+                  ),*/
                   const SizedBox(height: 4),
                   Text(
                     'AI-Driven General Identification and Logging Attendance',
                     textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 14, color: const Color(0xFF0045A2)),
+                    style: GoogleFonts.poppins(fontSize: 14, color: Theme.of(context).colorScheme.primary),
                   ),
                   const SizedBox(height: 32),
                   _buildTextField("School Email", idController, "example.000000@caloocan.sti.edu.ph"),
@@ -100,7 +109,7 @@ class LoginScreenState extends State<LoginScreen> {
                     children: [
                       Checkbox(
                         value: _rememberMe,
-                        activeColor: const Color(0xFF0058CE),
+                        activeColor: Theme.of(context).colorScheme.primary,
                         onChanged: (val) {
                           setState(() {
                             _rememberMe = val ?? false;
@@ -119,7 +128,7 @@ class LoginScreenState extends State<LoginScreen> {
                     children: [
                       Checkbox(
                         value: _termsAccepted,
-                        activeColor: const Color(0xFF0058CE),
+                        activeColor: Theme.of(context).colorScheme.primary,
                         onChanged: _toggleTerms,
                       ),
                       const SizedBox(width: 4),
@@ -132,8 +141,7 @@ class LoginScreenState extends State<LoginScreen> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.white.withOpacity(0.7),
-              child: const Center(child: CircularProgressIndicator(color: Color(0xFF0058CE))),
+              child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
             ),
         ],
       ),
@@ -147,15 +155,15 @@ class LoginScreenState extends State<LoginScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
-        hintStyle: const TextStyle(color: Color(0xFFBFBFBF)),
-        labelStyle: const TextStyle(color: Color(0x67001A3E)),
+        hintStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+        labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF0058CE), width: 2),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFAFAFAF), width: 2),
+          borderSide: BorderSide(color: Theme.of(context).colorScheme.surfaceContainerHighest, width: 2),
         ),
         suffixIcon: isPassword
             ? IconButton(
@@ -176,7 +184,7 @@ class LoginScreenState extends State<LoginScreen> {
       width: double.infinity,
       child: ElevatedButton(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF0058CE),
+          backgroundColor: Theme.of(context).colorScheme.primary,
           padding: const EdgeInsets.symmetric(vertical: 12),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
