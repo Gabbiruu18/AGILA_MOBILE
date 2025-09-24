@@ -11,15 +11,30 @@ import 'package:project_agila/Screens/Theme/agila_theme.dart';
 class MainLayout extends StatefulWidget {
   final String role;
   final String name;
+  final String firstName;
+  final String lastName;
   final String uid;
+  final String academicYearId;
+  final String acadYear;
+  final String semesterId;
+  final String semesterName;
 
   const MainLayout({
     super.key,
     required this.role,
     required this.name,
+    required this.firstName,
+    required this.lastName,
     required this.uid,
+    required this.academicYearId,
+    required this.acadYear,
+    required this.semesterId,
+    required this.semesterName,
     required bool faceRegistered,
   });
+
+
+
 
   @override
   State<MainLayout> createState() => _MainLayoutState();
@@ -37,11 +52,11 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   List<Widget> get _screens => [
-    HomeScreen(role: widget.role, name: widget.name, uid: widget.uid),
+    HomeScreen(role: widget.role, name: widget.name, uid: widget.uid, firstName: widget.firstName, lastName: widget.lastName),
     _isStaffRole
         ? ScheduleScreen(uid: widget.uid, role: widget.role)
         : const AttendanceScreen(),
-    RequestListScreen(uid: widget.uid, role: widget.role, name: widget.name),
+    RequestListScreen(uid: widget.uid, role: widget.role, name: widget.name, academicYearId: widget.academicYearId, acadYear: widget.acadYear, semesterId: widget.semesterId, semesterName: widget.semesterName,),
     ProfileScreen(role: widget.role, uid: widget.uid),
   ];
 

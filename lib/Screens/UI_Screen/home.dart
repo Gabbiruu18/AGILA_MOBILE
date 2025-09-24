@@ -8,12 +8,17 @@ import 'package:project_agila/Service_Modules/Home/home_UI.dart';
 class HomeScreen extends StatefulWidget {
   final String role;
   final String uid;
+  final String firstName;
+  final String lastName;
   final String name;
+
 
   const HomeScreen({
     Key? key,
     required this.role,
     required this.uid,
+    required this.firstName,
+    required this.lastName,
     required this.name,
   }) : super(key: key);
 
@@ -29,7 +34,13 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     controller = HomeController();
     controller.addListener(_onChanged);
-    controller.init(role: widget.role, uid: widget.uid, name: widget.name);
+    controller.init(
+      role: widget.role,
+      uid: widget.uid,
+      // **REMOVED**: These are no longer needed here
+      // firstName: widget.firstName,
+      // lastName: widget.lastName,
+    );
   }
 
   @override
@@ -72,20 +83,88 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // --- MODIFIED: Show details in a sliding panel ---
+
+  void _showScheduleDetails(ScheduleItem item) {
+    _showSlidingPanel(
+      title: item.subjectName,
+      content: ScheduleDetailContent(item: item),
+    );
+  }
+
+  void _onSectionChipTapped(String sectionName) {
+    _showSlidingPanelWithFuture(
+      title: 'Student list for $sectionName',
+      future: controller.viewSectionRoster(sectionName),
+      builder: (data) => SectionRosterContent(students: data ?? []),
+    );
+  }
+
+  void _onProfessorChipTapped(String instructorId, String professorName) {
+    _showSlidingPanelWithFuture(
+      title: 'Instructor Profile',
+      future: controller.viewInstructorDetails(instructorId),
+      builder: (data) {
+        if (data == null) {
+          return ErrorContent(error: 'Could not find details for $professorName.');
+        }
+        return InstructorDetailsContent(details: data);
+      },
+    );
+  }
+
+  void _onRoomChipTapped(String roomName) {
+    _showSlidingPanelWithFuture(
+      title: 'Today\'s Schedule for Room $roomName',
+      future: controller.viewRoomSchedule(roomName),
+      builder: (data) => RoomScheduleContent(schedules: data ?? []),
+    );
+  }
+
+  // --- NEW: Reusable Bottom Sheet Handlers ---
+
+  void _showSlidingPanel({required String title, required Widget content}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true, // Allows sheet to grow
+      builder: (context) => SlidingPanel(title: title, child: content),
+    );
+  }
+
+  void _showSlidingPanelWithFuture<T>({
+    required String title,
+    required Future<T> future,
+    required Widget Function(T? data) builder,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return FutureBuilder<T>(
+          future: future,
+          builder: (context, snapshot) {
+            Widget content;
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              content = const LoadingContent();
+            } else if (snapshot.hasError) {
+              content = ErrorContent(error: snapshot.error.toString());
+            } else {
+              content = builder(snapshot.data);
+            }
+            return SlidingPanel(title: title, child: content);
+          },
+        );
+      },
+    );
+  }
+
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final formattedMonthYear = DateFormat('MMMM yyyy').format(now);
     final formattedDay = DateFormat('EEEE').format(now);
     final formattedDayNumber = DateFormat('d').format(now);
-
-    // Decide which schedule UI to use
-    final isTeacherOrHead = widget.role == 'teacher' ||
-        widget.role == 'program_head' ||
-        widget.role == 'academic_head';
-
-// Dummy schedule list (same as before; you can keep your source of truth)
-
 
     return Scaffold(
       body: SafeArea(
@@ -98,7 +177,7 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               HeaderBar(
                 greeting: _greeting(),
-                name: widget.name,
+                name: controller.name, // Use the combined name from the controller
                 role: widget.role,
                 courseName: controller.course,
                 sectionName: controller.section,
@@ -126,21 +205,62 @@ class _HomeScreenState extends State<HomeScreen> {
 
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: isTeacherOrHead
-                    ? TeacherScheduleCard(
-                  items: controller.todaySchedules,
-                  title: 'Schedule for Today',
-                )
-                    : StudentScheduleCard(
-                  items: controller.todaySchedules,
-                  title: 'Schedule for Today',
-                ),
+                child: _buildScheduleSection(),
               ),
 
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildScheduleSection() {
+    // If schedules are still loading, show a spinner.
+    if (controller.isLoadingSchedules) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    // If there was an error, display it clearly.
+    if (controller.schedulesError != null) {
+      return Card(
+        color: Colors.red[50],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Text(
+                'Failed to Load Schedules',
+                style: TextStyle(fontWeight: FontWeight.bold, color: Colors.red[800]),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${controller.schedulesError}\n\nPlease check the debug console for more details.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.red[700]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Otherwise, build the correct card for the user role.
+    return controller.isTeacherOrHead
+        ? TeacherScheduleCard(
+      items: controller.todaySchedules,
+      title: 'Schedule for Today',
+      onItemTap: _showScheduleDetails,
+      onSectionTap: _onSectionChipTapped,
+      onRoomTap: _onRoomChipTapped,
+    )
+        : StudentScheduleCard(
+      items: controller.todaySchedules,
+      title: 'Schedule for Today',
+      onItemTap: _showScheduleDetails,
+      onSectionTap: _onSectionChipTapped,
+      onProfessorTap: _onProfessorChipTapped,
+      onRoomTap: _onRoomChipTapped,
     );
   }
 }

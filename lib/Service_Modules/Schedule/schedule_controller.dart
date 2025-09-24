@@ -10,68 +10,59 @@ class ScheduleController extends ChangeNotifier {
   ViewMode mode = ViewMode.today;
   int dayOffset = 0; // 0=Today, 1=Tomorrow
 
-  bool loadingDay = false;
-  bool loadingWeek = false;
+  bool isLoading = false;
   String? error;
 
-  List<Session> dayItems = const [];
   Map<int, List<Session>> weekItems = const {};
+  List<Session> dayItems = const [];
 
   ScheduleController({required this.service, required this.uid}) {
     _init();
   }
 
   Future<void> _init() async {
-    await Future.wait([loadDay(), loadWeek()]);
+    await loadSchedules();
   }
 
   DateTime get dayDate => DateTime.now().add(Duration(days: dayOffset));
+
+  Future<void> loadSchedules() async {
+    isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      weekItems = await service.fetchWeek(uid: uid);
+      _filterDayItems();
+    } catch (e) {
+      error = e.toString();
+      weekItems = {};
+      dayItems = [];
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _filterDayItems() {
+    final weekday = dayDate.weekday;
+    dayItems = weekItems[weekday] ?? [];
+    notifyListeners();
+  }
 
   Future<void> setMode(ViewMode v) async {
     if (mode == v) return;
     mode = v;
     notifyListeners();
-    if (mode == ViewMode.today && dayItems.isEmpty) await loadDay();
-    if (mode == ViewMode.week && weekItems.isEmpty) await loadWeek();
   }
 
   void stepDay(int delta) {
     final next = (dayOffset + delta).clamp(0, 1);
     if (next == dayOffset) return;
     dayOffset = next;
+    _filterDayItems();
     notifyListeners();
-    loadDay();
   }
 
-  Future<void> loadDay() async {
-    loadingDay = true;
-    error = null;
-    notifyListeners();
-    try {
-      dayItems = await service.fetchDay(uid: uid, day: dayDate);
-    } catch (e) {
-      error = e.toString();
-    } finally {
-      loadingDay = false;
-      notifyListeners();
-    }
-  }
-
-  Future<void> loadWeek() async {
-    loadingWeek = true;
-    error = null;
-    notifyListeners();
-    try {
-      weekItems = await service.fetchWeek(uid: uid, anyDayInWeek: DateTime.now());
-    } catch (e) {
-      error = e.toString();
-    } finally {
-      loadingWeek = false;
-      notifyListeners();
-    }
-  }
-
-  /// Status logic: for Tomorrow everything is Upcoming
   String statusFor(Session s) {
     if (dayOffset != 0) return 'Upcoming';
     final now = DateTime.now();
@@ -79,5 +70,14 @@ class ScheduleController extends ChangeNotifier {
     if (nowMins >= s.startMinutes && nowMins < s.endMinutes) return 'Live';
     if (nowMins < s.startMinutes) return 'Upcoming';
     return 'Done';
+  }
+
+  // Methods to handle chip taps, delegating to the service
+  Future<List<SectionStudent>> viewSectionRoster(String sectionName) {
+    return service.fetchStudentsForSection(sectionName);
+  }
+
+  Future<List<RoomSchedule>> viewRoomSchedule(String roomName) {
+    return service.fetchSchedulesForRoom(roomName);
   }
 }
