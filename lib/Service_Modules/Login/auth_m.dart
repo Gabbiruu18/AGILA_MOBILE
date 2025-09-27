@@ -85,6 +85,12 @@ class AuthServices {
             name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}',
             uid: uid,
             faceRegistered: true,
+            academicYearId: '',
+            acadYear: '',
+            semesterId: '',
+            semesterName: '',
+            firstName: '',
+            lastName: '',
           ),
         ),
       );

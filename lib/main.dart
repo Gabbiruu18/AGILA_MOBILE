@@ -73,6 +73,8 @@ class MyApp extends StatelessWidget {
                 role: args['role'],
                 name: args['name'],
                 uid: args['uid'],
+                firstName: args['firstName'],
+                lastName: args['lastName'],
               );
             },
           },
