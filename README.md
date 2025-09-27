@@ -12,19 +12,19 @@ ADDED SCREENS
 
 
 - Request - (Students)Can request to all available teachers, Not subject teachers only.
-  (Teachers) Can request to other available teachers and faculty.
-
-            A Few MOre tweaks, on the Type of Request and data storing.
+  (Teachers) Can request to other available teachers and faculty. 
+  
+  A Few MOre tweaks, on the Type of Request and data storing.
             (fields: acadYearId: semesterId: )
 
-            Tweaks on the feedBack UI.
+  Tweaks on the feedBack UI.
 
 - Profile - New UI, Contact No. applied, add and show Profile Pic both teacher
   and students, need confirmation on logout.
 
-            Settings Button Added, Darkmode switch and Logout button will be inside the Settings.
+  Settings Button Added, Dark mode switch and Logout button will be inside the Settings.
 
-            Need to: Add Turn Off Notification, add alarm sound or custom alarm sound.
+  Need to: Add Turn Off Notification, add alarm sound or custom alarm sound.
 
 Face Registration and Face Recognition screen
 - Testing deployed backend
