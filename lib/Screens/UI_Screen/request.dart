@@ -18,7 +18,7 @@ class RequestListScreen extends StatefulWidget {
   final String semesterName;
 
   const RequestListScreen({
-    Key? key,
+    super.key,
     required this.uid,
     required this.role,
     required this.name,
@@ -26,7 +26,7 @@ class RequestListScreen extends StatefulWidget {
     required this.acadYear,
     required this.semesterId,
     required this.semesterName,
-  }) : super(key: key);
+  });
 
 
 
@@ -76,7 +76,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
                 academicYearId: widget.academicYearId,
                 acadYear: widget.acadYear,
                 semesterId: widget.semesterId,
-                semesterName: widget.semesterId,
+                semesterName: widget.semesterName,
               ),
             ),
           ),
@@ -145,7 +145,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
                       academicYearId: widget.academicYearId,
                       acadYear: widget.acadYear,
                       semesterId: widget.semesterId,
-                      semesterName: widget.semesterId,
+                      semesterName: widget.semesterName,
                     ),
                   ),
                   onRefresh: () async {

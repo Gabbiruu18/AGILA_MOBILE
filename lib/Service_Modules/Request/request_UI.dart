@@ -12,7 +12,7 @@ class RequestScreenTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      'Requests',
+        'Requests',
         style: Theme.of(context).textTheme.bodyMedium?.copyWith
           (color: Theme.of(context).colorScheme.primary,
             fontSize: 24, fontWeight: FontWeight.w700)
@@ -551,16 +551,22 @@ class RequestDetailsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final type = (data['type'] ?? 'Unknown').toString();
     final status = (data['status'] ?? 'Pending').toString();
-    final ts = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
+    final ts = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
     final reason = (data['reason'] ?? '').toString();
 
     final decision = data['decision'] as Map<String, dynamic>?;
     final decisionRemarks = (decision?['remarks'] ?? '').toString();
 
-    final toName = (data['to'] ?? '—').toString();
-    final fromName = (data['name'] ?? data['fromName'] ?? 'Unknown').toString();
     final senderRole = (data['role'] ?? '').toString();
-    final attachmentUrl = (data['attachmentUrl'] ?? '').toString();
+    final recipientRole = (data['recipientRole'] ?? '').toString();
+
+    final senderRoleKey = senderRole.isNotEmpty ? senderRole[0].toUpperCase() + senderRole.substring(1) : '';
+    final recipientRoleKey = recipientRole.isNotEmpty ? recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '') : '';
+
+    final fromName = (data['from${senderRoleKey}Name'] ?? 'Unknown').toString();
+    final toName = (data['to${recipientRoleKey}Name'] ?? '—').toString();
+
+    final attachments = (data['attachments'] as List<dynamic>?) ?? [];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
@@ -579,7 +585,7 @@ class RequestDetailsSheet extends StatelessWidget {
           _kv('From', '$fromName (${senderRole.isEmpty ? '—' : senderRole})'),
           _kv('Reason', reason.isEmpty ? '—' : reason),
           if (decisionRemarks.isNotEmpty) _kv('Decision Remarks', decisionRemarks),
-          _buildAttachmentRow(context, attachmentUrl),
+          _buildAttachmentsList(context, attachments),
           const SizedBox(height: 12),
           if (status == 'Pending' && isStaff && isReceived)
             Row(
@@ -623,7 +629,7 @@ class RequestDetailsSheet extends StatelessWidget {
     );
   }
 
-  Widget _buildAttachmentRow(BuildContext context, String attachmentUrl) {
+  Widget _buildAttachmentsList(BuildContext context, List<dynamic> attachments) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
@@ -632,34 +638,49 @@ class RequestDetailsSheet extends StatelessWidget {
           const SizedBox(
             width: 90,
             child: Text(
-              'Attachment',
+              'Attachments',
               style: TextStyle(fontWeight: FontWeight.w600),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
-            child: (attachmentUrl.isEmpty)
+            child: attachments.isEmpty
                 ? const Text('—')
-                : InkWell(
-              onTap: () async {
-                final Uri uri = Uri.parse(attachmentUrl);
-                if (await canLaunchUrl(uri)) {
-                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Could not open attachment: $attachmentUrl')),
-                    );
-                  }
+                : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: attachments.map((attachment) {
+                final String name = attachment['name'] ?? 'Unknown file';
+                final String url = attachment['url'] ?? '';
+
+                if (url.isEmpty) {
+                  return Text(name, style: const TextStyle(color: Colors.grey));
                 }
-              },
-              child: Text(
-                'View Attachment',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.primary,
-                  decoration: TextDecoration.underline,
-                ),
-              ),
+
+                return InkWell(
+                  onTap: () async {
+                    final Uri uri = Uri.parse(url);
+                    if (await canLaunchUrl(uri)) {
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    } else {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Could not open attachment: $url')),
+                        );
+                      }
+                    }
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Text(
+                      name,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
           ),
         ],

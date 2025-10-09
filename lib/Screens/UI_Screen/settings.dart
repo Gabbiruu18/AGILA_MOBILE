@@ -1,12 +1,10 @@
-// lib/Screens/UI_Screen/settings.dart
 import 'package:flutter/material.dart';
-import '../../Screens/Theme/theme_scope.dart';
-import '../../Screens/Theme/theme_controller.dart';
-import '../../Service_Modules/Profile/profile_UI.dart';
-import '../../Service_Modules/Settings/settings_controller.dart'; // if you're using sound settings
+import 'package:project_agila/Screens/Theme/theme_scope.dart';
+import 'package:project_agila/Screens/Theme/theme_controller.dart';
+import 'package:project_agila/Service_Modules/Settings/settings_controller.dart';
 
 Future<bool?> showSettingsSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(      // <- note the <bool>
+  return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -18,7 +16,6 @@ Future<bool?> showSettingsSheet(BuildContext context) {
   );
 }
 
-
 class _SettingsSheet extends StatefulWidget {
   const _SettingsSheet();
 
@@ -27,17 +24,15 @@ class _SettingsSheet extends StatefulWidget {
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-
-  late ThemeController _themeCtrl;            // <- don't grab in initState
+  late ThemeController _themeCtrl;
   late final SettingsController _settingsCtrl;
 
   @override
   void initState() {
     super.initState();
-    _settingsCtrl = SettingsController()..load();
+    _settingsCtrl = SettingsController()..load(); // This now loads everything
   }
 
-  // ✅ Correct place to access ThemeScope (InheritedWidget)
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -55,7 +50,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     final cs = Theme.of(context).colorScheme;
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_themeCtrl, _settingsCtrl]),
+      animation: Listenable.merge([_themeCtrl, _settingsCtrl]), // Only listen to these two
       builder: (context, _) {
         final isDark = switch (_themeCtrl.mode) {
           ThemeMode.dark => true,
@@ -85,7 +80,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
-              // Theme toggle
               Card(
                 child: Column(
                   children: [
@@ -109,28 +103,51 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                 ),
               ),
 
+              // --- Quick Login Settings ---
               Card(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     ListTile(
-                      dense: true,
-                      leading: Icon(Icons.logout, color: Colors.red),
-                      title: Text(
-                        'Logout',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                      title: Text("Quick Login", style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ),
+                    if (_settingsCtrl.canCheckBiometrics)
+                      SwitchListTile.adaptive(
+                        title: const Text("Use Biometrics"),
+                        value: _settingsCtrl.hasBiometrics,
+                        onChanged: (value) => _settingsCtrl.toggleBiometrics(context, value: value),
                       ),
-                      onTap: () async {
-                        await _settingsCtrl.logout(context); // controller handles confirm + sign out
-                      },
+                    ListTile(
+                      title: const Text("Passcode"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_settingsCtrl.hasPasscode ? "Enabled" : "Not Set", style: TextStyle(color: cs.outline)),
+                          const SizedBox(width: 8),
+                          if (_settingsCtrl.hasPasscode)
+                            IconButton(
+                              icon: Icon(Icons.delete_outline, color: cs.error),
+                              onPressed: () => _settingsCtrl.removePasscode(context),
+                              tooltip: "Remove Passcode",
+                            ),
+                        ],
+                      ),
                     ),
                   ],
-                )
+                ),
               ),
-              SizedBox(height: 8),
-              // (Optional) Notification sound block here if you added it…
 
-
+              Card(
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: Text(
+                    'Logout',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () => _settingsCtrl.logout(context),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         );

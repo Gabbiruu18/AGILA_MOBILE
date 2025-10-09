@@ -4,7 +4,6 @@ import 'attendance_service.dart';
 class AttendanceState {
   final ViewMode mode;
   final DateTime anchor;
-  final Counts counts;
   final List<SubjectDayGroup> dailyGroups;
   final List<SubjectWeekItem> weeklyItems;
   final List<SubjectTotals> monthlyTotals;
@@ -14,7 +13,6 @@ class AttendanceState {
   const AttendanceState({
     required this.mode,
     required this.anchor,
-    required this.counts,
     required this.dailyGroups,
     required this.weeklyItems,
     required this.monthlyTotals,
@@ -25,29 +23,26 @@ class AttendanceState {
   AttendanceState copyWith({
     ViewMode? mode,
     DateTime? anchor,
-    Counts? counts,
     List<SubjectDayGroup>? dailyGroups,
     List<SubjectWeekItem>? weeklyItems,
     List<SubjectTotals>? monthlyTotals,
     bool? loading,
-    Object? error = const _NoChange<String?>(), // sentinel stays
+    Object? error = const _NoChange<String?>(),
   }) {
     return AttendanceState(
       mode: mode ?? this.mode,
       anchor: anchor ?? this.anchor,
-      counts: counts ?? this.counts,
       dailyGroups: dailyGroups ?? this.dailyGroups,
       weeklyItems: weeklyItems ?? this.weeklyItems,
       monthlyTotals: monthlyTotals ?? this.monthlyTotals,
       loading: loading ?? this.loading,
-      error: error is _NoChange ? this.error : error as String?, // cast to String?
+      error: error is _NoChange ? this.error : error as String?,
     );
   }
 
   static AttendanceState initial(DateTime now) => AttendanceState(
     mode: ViewMode.daily,
     anchor: now,
-    counts: const Counts(0, 0, 0),
     dailyGroups: const [],
     weeklyItems: const [],
     monthlyTotals: const [],
@@ -56,39 +51,25 @@ class AttendanceState {
   );
 }
 
-// helper to allow nullable field no-change in copyWith
-class _NoChange<T> {
-  const _NoChange();
-}
+class _NoChange<T> { const _NoChange(); }
 
 class AttendanceController extends ChangeNotifier {
   final AttendanceService service;
   final String userId;
+  final String role;
   AttendanceState _state = AttendanceState.initial(DateTime.now());
   AttendanceState get state => _state;
 
-  AttendanceController({required this.service, required this.userId});
+  AttendanceController({required this.service, required this.userId, required this.role});
 
-  // ---- Normalize all boundaries to date-only (00:00) ----
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-  // Period helpers (use date-only consistently)
   DateTime _startOfDay(DateTime d) => _dateOnly(d);
-
-  DateTime _startOfWeek(DateTime d) {
-    final sd = _dateOnly(d);
-    return sd.subtract(Duration(days: sd.weekday - 1)); // Monday 00:00
-  }
-
+  DateTime _startOfWeek(DateTime d) => _dateOnly(d).subtract(Duration(days: d.weekday - 1));
   DateTime _endOfWeek(DateTime d) => _startOfWeek(d).add(const Duration(days: 6));
-
   DateTime _startOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
-
-  DateTime _endOfMonth(DateTime d) =>
-      DateTime(d.year, d.month + 1, 1).subtract(const Duration(days: 1));
+  DateTime _endOfMonth(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
   void setMode(ViewMode m) {
-    // also normalize anchor to avoid stray time components
     _state = _state.copyWith(mode: m, anchor: _dateOnly(_state.anchor));
     refresh();
   }
@@ -97,17 +78,11 @@ class AttendanceController extends ChangeNotifier {
     final m = _state.mode;
     DateTime a = _state.anchor;
     switch (m) {
-      case ViewMode.daily:
-        a = a.add(Duration(days: delta));
-        break;
-      case ViewMode.weekly:
-        a = a.add(Duration(days: 7 * delta));
-        break;
-      case ViewMode.monthly:
-        a = DateTime(a.year, a.month + delta, 1);
-        break;
+      case ViewMode.daily:   a = a.add(Duration(days: delta)); break;
+      case ViewMode.weekly:  a = a.add(Duration(days: 7 * delta)); break;
+      case ViewMode.monthly: a = DateTime(a.year, a.month + delta, 1); break;
     }
-    _state = _state.copyWith(anchor: _dateOnly(a)); // normalize after shift
+    _state = _state.copyWith(anchor: _dateOnly(a));
     refresh();
   }
 
@@ -131,15 +106,6 @@ class AttendanceController extends ChangeNotifier {
     }
   }
 
-  int _sev(SessStatus st) {
-    switch (st) {
-      case SessStatus.absent:  return 3;
-      case SessStatus.late:    return 2;
-      case SessStatus.present: return 1;
-      case SessStatus.excused: return 1;
-    }
-  }
-
   Future<void> refresh() async {
     _state = _state.copyWith(loading: true, error: null);
     notifyListeners();
@@ -152,23 +118,8 @@ class AttendanceController extends ChangeNotifier {
       };
 
       final sessionsByDate = await service.getSessionsForRange(
-        userId: userId, start: start, end: end,
+        userId: userId, role: role, start: start, end: end,
       );
-
-      // ---- Counts across the period
-      int p = 0, l = 0, a = 0;
-      for (final entry in sessionsByDate.entries) {
-        for (final s in entry.value) {
-          final st = await service.getStatusFor(userId: userId, date: entry.key, session: s);
-          switch (st) {
-            case SessStatus.present: p++; break;
-            case SessStatus.late:    l++; break;
-            case SessStatus.excused: p++; break;
-            case SessStatus.absent:  a++; break;
-          }
-        }
-      }
-      final counts = Counts(p, l, a);
 
       // ---- Daily groups (for anchor date)
       List<SubjectDayGroup> dailyGroups = const [];
@@ -177,87 +128,57 @@ class AttendanceController extends ChangeNotifier {
         final list = sessionsByDate[d] ?? const <Session>[];
         final map = <String, List<Session>>{};
         for (final s in list) {
-          final key = displayName(s);
-          map.putIfAbsent(key, () => []).add(s);
+          map.putIfAbsent(displayName(s), () => []).add(s);
         }
-        final groups = map.entries.map((e) {
-          e.value.sort((a, b) => a.start.hour != b.start.hour
-              ? a.start.hour.compareTo(b.start.hour)
-              : a.start.minute.compareTo(b.start.minute));
+        dailyGroups = map.entries.map((e) {
+          e.value.sort((a, b) => a.start.hour.compareTo(b.start.hour));
           return SubjectDayGroup(subjectDisplay: e.key, sessions: e.value);
         }).toList()
           ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        dailyGroups = groups;
       }
 
-      // ---- Weekly items (Mon–Fri of this anchor week)
+      // ---- Weekly items (Mon–Fri)
       List<SubjectWeekItem> weeklyItems = const [];
-      {
+      if (_state.mode == ViewMode.weekly) {
         final mon = _startOfWeek(_state.anchor);
         final byKey = <String, List<(int idx, Session s)>>{};
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 5; i++) { // Only Mon-Fri
           final d = mon.add(Duration(days: i));
-          final list = sessionsByDate[d] ?? const <Session>[];
-          for (final s in list) {
-            final key = displayName(s);
-            byKey.putIfAbsent(key, () => []);
-            byKey[key]!.add((i, s));
+          for (final s in sessionsByDate[d] ?? []) {
+            byKey.putIfAbsent(displayName(s), () => [])!.add((i, s));
           }
         }
-
-        final items = <SubjectWeekItem>[];
-        for (final entry in byKey.entries) {
+        weeklyItems = byKey.entries.map((entry) {
           final statuses = List<SessStatus?>.filled(5, null);
-          int attended = 0;
           for (final pair in entry.value) {
-            final idx = pair.$1;
-            final date = mon.add(Duration(days: idx));
-            final st = await service.getStatusFor(userId: userId, date: date, session: pair.$2);
-
-            final cur = statuses[idx];
-            if (cur == null || _sev(st) > _sev(cur)) {
-              statuses[idx] = st;
-            }
-            if (st == SessStatus.present || st == SessStatus.late || st == SessStatus.excused) {
-              attended++;
-            }
+            statuses[pair.$1] = SessStatus.scheduled; // Mark as scheduled
           }
-          final weekFlags = List<bool>.generate(5, (i) => statuses[i] != null);
           final total = entry.value.length;
-          items.add(SubjectWeekItem(
+          return SubjectWeekItem(
             subjectDisplay: entry.key,
-            week: weekFlags,
-            attended: attended,
+            week: List<bool>.generate(5, (i) => statuses[i] != null),
+            attended: 0, // Placeholder
             total: total,
             statuses: statuses,
-          ));
-        }
-        items.sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        weeklyItems = items;
+          );
+        }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       }
 
-      // ---- Monthly totals (actual)
+      // ---- Monthly totals
       List<SubjectTotals> monthlyTotals = const [];
-      {
-        final map = <String, (int att, int tot)>{};
-        for (final entry in sessionsByDate.entries) {
-          for (final s in entry.value) {
-            final name = displayName(s);
-            final st = await service.getStatusFor(userId: userId, date: entry.key, session: s);
-            final cur = map[name] ?? (0, 0);
-            final attInc = (st == SessStatus.present || st == SessStatus.late || st == SessStatus.excused) ? 1 : 0;
-            map[name] = (cur.$1 + attInc, cur.$2 + 1);
-          }
-        }
-        final list = map.entries
-            .map((e) => SubjectTotals(subjectDisplay: e.key, attended: e.value.$1, total: e.value.$2))
-            .toList()
-          ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        monthlyTotals = list;
+      if (_state.mode == ViewMode.monthly) {
+        final map = <String, int>{};
+        sessionsByDate.values.expand((s) => s).forEach((s) {
+          map[displayName(s)] = (map[displayName(s)] ?? 0) + 1;
+        });
+        monthlyTotals = map.entries.map((e) => SubjectTotals(
+          subjectDisplay: e.key,
+          attended: 0, // Placeholder
+          total: e.value,
+        )).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       }
 
       _state = _state.copyWith(
-        counts: counts,
         dailyGroups: dailyGroups,
         weeklyItems: weeklyItems,
         monthlyTotals: monthlyTotals,
@@ -268,5 +189,14 @@ class AttendanceController extends ChangeNotifier {
       _state = _state.copyWith(loading: false, error: e.toString());
     }
     notifyListeners();
+  }
+
+  // --- Methods for Details Panel ---
+  Future<List<SectionStudent>> viewSectionRoster(String sectionName) {
+    return service.fetchStudentsForSection(sectionName: sectionName);
+  }
+
+  Future<InstructorDetails?> viewInstructorDetails(String instructorId) {
+    return service.fetchInstructorDetails(instructorId: instructorId);
   }
 }

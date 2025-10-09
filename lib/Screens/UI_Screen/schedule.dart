@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:project_agila/Service_Modules/Schedule/schedule_controller.dart';
 import 'package:project_agila/Service_Modules/Schedule/schedule_service.dart';
 import 'package:project_agila/Service_Modules/Schedule/schedule_UI.dart';
@@ -7,7 +8,17 @@ import 'package:project_agila/Service_Modules/Schedule/schedule_UI.dart';
 class ScheduleScreen extends StatefulWidget {
   final String uid;
   final String role;
-  const ScheduleScreen({super.key, required this.uid, required this.role});
+  // These are no longer needed but kept for constructor compatibility if you call it from old code.
+  final String academicYearId;
+  final String semesterId;
+
+  const ScheduleScreen({
+    super.key,
+    required this.uid,
+    required this.role,
+    this.academicYearId = '', // Default to empty
+    this.semesterId = '',     // Default to empty
+  });
 
   @override
   State<ScheduleScreen> createState() => _ScheduleScreenState();
@@ -19,7 +30,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    ctrl = ScheduleController(service: FirestoreScheduleService(), uid: widget.uid);
+    // The controller is now self-sufficient and only needs uid and role.
+    ctrl = ScheduleController(service: FirestoreScheduleService(), uid: widget.uid, role: widget.role);
     ctrl.addListener(() => setState(() {}));
   }
 
@@ -29,11 +41,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     super.dispose();
   }
 
-  void _showRoomSchedule(String roomName) {
-    Navigator.of(context).pop();
-    _showSlidingPanelWithFuture(
-      title: 'Today\'s Schedule for Room $roomName',
-      future: ctrl.viewRoomSchedule(roomName),
+  void _showRoomSchedule({required String roomName, required DateTime forDate}) {
+    // Pop the current details panel if it's open before showing the new one.
+    if (Navigator.canPop(context)) {
+      Navigator.of(context).pop();
+    }
+
+    _showSlidingPanelWithFuture<List<RoomSchedule>>(
+      title: 'Schedule for Room $roomName on ${DateFormat('MMM d').format(forDate)}',
+      future: ctrl.viewRoomSchedule(roomName: roomName, forDate: forDate),
       builder: (data) => RoomScheduleContent(schedules: data ?? []),
     );
   }
@@ -66,7 +82,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 
-  void _viewSession(Session s) {
+  void _viewSession(Session s, DateTime date) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -75,7 +91,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return _SessionDetailsPanel(
           session: s,
           fetchStudents: () => ctrl.viewSectionRoster(s.section),
-          onRoomTap: () => _showRoomSchedule(s.room),
+          onRoomTap: () => _showRoomSchedule(roomName: s.room, forDate: date),
         );
       },
     );
@@ -179,7 +195,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
 class _TodayView extends StatelessWidget {
   final ScheduleController ctrl;
-  final void Function(Session session) onViewDetails;
+  final void Function(Session session, DateTime date) onViewDetails;
 
   const _TodayView({required this.ctrl, required this.onViewDetails});
 
@@ -205,7 +221,7 @@ class _TodayView extends StatelessWidget {
         return SessionCard(
           session: s,
           status: ctrl.statusFor(s),
-          onViewDetails: () => onViewDetails(s),
+          onViewDetails: () => onViewDetails(s, ctrl.dayDate),
         );
       },
     );
@@ -214,7 +230,7 @@ class _TodayView extends StatelessWidget {
 
 class _WeekView extends StatelessWidget {
   final ScheduleController ctrl;
-  final void Function(Session session) onViewDetails;
+  final void Function(Session session, DateTime date) onViewDetails;
 
   const _WeekView({required this.ctrl, required this.onViewDetails});
 
@@ -263,7 +279,8 @@ class _WeekView extends StatelessWidget {
               final day = i + 1; // 1..7
               final items = map[day] ?? <Session>[];
               final date = dates[day]!;
-              final isToday = DateTime.now().weekday == day;
+              final now = DateTime.now();
+              final isToday = now.weekday == day && now.day == date.day && now.month == date.month && now.year == date.year;
 
               return Container(
                 width: 280,
@@ -279,7 +296,7 @@ class _WeekView extends StatelessWidget {
                   children: [
                     Row(children: [
                       Text('${weekdayLabel(day)} • ${d2(date.day)}/${d2(date.month)}',
-                          style: TextStyle(fontWeight: FontWeight.w700, color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.surfaceContainer)),
+                          style: TextStyle(fontWeight: FontWeight.w700, color: isToday ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.onSurfaceVariant)),
                       if (isToday) ...[const SizedBox(width: 6), const NowDot()],
                     ]),
                     const SizedBox(height: 8),
@@ -288,7 +305,7 @@ class _WeekView extends StatelessWidget {
                     else
                       ...items.map((s) => Padding(
                         padding: const EdgeInsets.only(bottom: 8),
-                        child: MiniSessionTile(session: s, isToday: isToday, onTap: () => onViewDetails(s)),
+                        child: MiniSessionTile(session: s, isToday: isToday, onTap: () => onViewDetails(s, date)),
                       )),
                   ],
                 ),
@@ -343,7 +360,6 @@ class _SessionDetailsPanelState extends State<_SessionDetailsPanel> {
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerLeft,
-                // **FIXED**: Using the public `InfoChip` widget.
                 child: InfoChip(
                   icon: Icons.meeting_room_outlined,
                   label: widget.session.room,

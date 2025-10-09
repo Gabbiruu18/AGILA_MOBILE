@@ -2,18 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:permission_handler/permission_handler.dart';
-// Keep this import only if you use prefs elsewhere in main.dart
-import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:project_agila/Screens/Face Recognition/face_recognition_tester.dart';
 import 'package:project_agila/Screens/MainScreens/opening.dart';
 import 'package:project_agila/Screens/MainScreens/login.dart';
-import 'package:project_agila/Screens/face_registration/face_registration.dart';
-import 'package:project_agila/Screens/face_registration/face_registration_process.dart';
 import 'package:project_agila/Screens/MainScreens/quick_login.dart';
 import 'package:project_agila/Screens/UI_Screen/home.dart';
 
-// NEW: theme wiring
 import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Screens/Theme/theme_scope.dart';
@@ -22,15 +15,19 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
+  // --- 2. SECURITY NOTE FOR PRODUCTION ---
+  // Before releasing your app, you MUST replace the .debug providers
+  // with the production providers (e.g., AndroidProvider.playIntegrity).
   await FirebaseAppCheck.instance.activate(
-    webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'),
+    webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'), // Replace with your actual key
     androidProvider: AndroidProvider.debug,
     appleProvider: AppleProvider.debug,
   );
 
+  // Consider moving permission requests to be "just-in-time" (when they are needed)
+  // instead of requesting them all on startup.
   await requestPermissions();
 
-  // === THEME CONTROLLER: load persisted mode before runApp ===
   final themeCtrl = ThemeController();
   await themeCtrl.load();
 
@@ -53,28 +50,34 @@ class MyApp extends StatelessWidget {
       builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
-          // THEME HOOKS
           theme: agilaLight,
           darkTheme: agilaDark,
           themeMode: themeCtrl.mode,
-
-          initialRoute: '/opening', // Always go to Opening first
+          initialRoute: '/opening',
           routes: {
             '/opening': (context) => const OpeningScreen(),
             '/': (context) => const LoginScreen(),
             '/quick-login': (context) => const QuickLoginScreen(),
-            '/facial-registration': (context) => const FacialRegistrationScreen(),
-            '/registration-processing': (context) => const FacialRegistrationProcessingScreen(),
-            '/face-recognition-tester': (context) => const FaceRecognitionTesterScreen(),
+            //'/face-recognition-tester': (context) => const FaceRecognitionTesterScreen(),
 
+            // --- 1. CRASH-PROOF NAVIGATION ---
             '/home': (context) {
-              final args = ModalRoute.of(context)!.settings.arguments as Map;
+              final args = ModalRoute.of(context)?.settings.arguments;
+
+              // Defensive check: If arguments are missing or not a Map,
+              // gracefully redirect to the login screen to prevent a crash.
+              if (args == null || args is! Map) {
+                debugPrint("Error: /home route was pushed without valid arguments. Redirecting to login.");
+                return const LoginScreen();
+              }
+
+              // Safely access arguments with default values to prevent null errors.
               return HomeScreen(
-                role: args['role'],
-                name: args['name'],
-                uid: args['uid'],
-                firstName: args['firstName'],
-                lastName: args['lastName'],
+                role: args['role'] ?? 'default_role',
+                name: args['name'] ?? 'Unknown User',
+                uid: args['uid'] ?? '',
+                firstName: args['firstName'] ?? '',
+                lastName: args['lastName'] ?? '',
               );
             },
           },

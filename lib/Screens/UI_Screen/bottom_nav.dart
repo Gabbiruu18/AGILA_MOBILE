@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:project_agila/Screens/UI_Screen/home.dart';
 import 'package:project_agila/Screens/UI_Screen/profile.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Screens/UI_Screen/request.dart';
 import 'package:project_agila/Screens/UI_Screen/attendance.dart';
 import 'package:project_agila/Screens/UI_Screen/schedule.dart';
-import 'package:project_agila/Screens/Theme/agila_theme.dart';
 
 class MainLayout extends StatefulWidget {
   final String role;
@@ -47,15 +45,15 @@ class _MainLayoutState extends State<MainLayout> {
   bool get _isStaffRole {
     final r = widget.role.toLowerCase();
     return r == 'teacher' ||
-        r == 'program_head' || r == 'program' ||
-        r == 'academic_head' || r == 'academic';
+        r == 'program_head' || r == 'program';
   }
 
   List<Widget> get _screens => [
     HomeScreen(role: widget.role, name: widget.name, uid: widget.uid, firstName: widget.firstName, lastName: widget.lastName),
     _isStaffRole
-        ? ScheduleScreen(uid: widget.uid, role: widget.role)
-        : const AttendanceScreen(),
+        ? ScheduleScreen(uid: widget.uid, role: widget.role, academicYearId: widget.academicYearId, semesterId: widget.semesterId)
+    // ✅ FIX: Passed the required uid and role to AttendanceScreen
+        : AttendanceScreen(uid: widget.uid, role: widget.role),
     RequestListScreen(uid: widget.uid, role: widget.role, name: widget.name, academicYearId: widget.academicYearId, acadYear: widget.acadYear, semesterId: widget.semesterId, semesterName: widget.semesterName,),
     ProfileScreen(role: widget.role, uid: widget.uid),
   ];

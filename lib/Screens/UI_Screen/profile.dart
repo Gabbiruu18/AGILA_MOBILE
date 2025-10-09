@@ -1,6 +1,4 @@
-// Screens/UI_Screen/profile.dart (or Service_Modules/Profile/profile.dart if that's your path)
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Screens/UI_Screen/settings.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_controller.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_UI.dart';
@@ -57,12 +55,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'program_head':
       case 'programhead':
         return 'Program Head';
-      case 'academic_head':
-      case 'academichead':
-        return 'Academic Head';
-      case 'admin':
-      case 'administrator':
-        return 'Admin';
       default:
       // prettify whatever was stored in DB (e.g., "registrar head")
         return normalizedRole
@@ -205,27 +197,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           SizedBox(height: 16),
-
-          // Tools (show for staff or everyone if you prefer)
-          /*InfoCard(
-            title: 'Tools',
-            children: [
-              ListTile(
-                dense: true,
-                leading: Icon(Icons.logout, color: Colors.red),
-                title: Text(
-                  'Logout',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
-                ),
-                onTap: () async {
-                  await controller.logout(context); // controller handles confirm + sign out
-                },
-
-              ),
-
-            ],
-          ),
-          SizedBox(height: 8),*/
         ],
       ),
     );

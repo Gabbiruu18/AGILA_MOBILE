@@ -61,8 +61,6 @@ class ProfileService {
         return 'teachersPhoto';
       case 'program_head':
         return 'programHeadsPhoto';
-      case 'academic_head':
-        return 'academicHeadsPhoto';
       default:
         return '${role.toLowerCase()}Photo';
     }

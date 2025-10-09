@@ -9,7 +9,7 @@ class RequestService {
       .collection('accounts')
       .doc(uid)
       .collection('Request')
-      .orderBy('timestamp', descending: newestFirst);
+      .orderBy('createdAt', descending: newestFirst);
 
   Query receivedQuery(String role, String uid, bool newestFirst) => _db
       .collection('users')
@@ -17,7 +17,7 @@ class RequestService {
       .collection('accounts')
       .doc(uid)
       .collection('received_request')
-      .orderBy('timestamp', descending: newestFirst);
+      .orderBy('createdAt', descending: newestFirst);
 
   Future<void> updateStatus({
     required String newStatus,
@@ -57,7 +57,7 @@ class RequestService {
     // Prepare the data for update. Keep top-level status for filtering.
     final updateData = {
       'status': newStatus,
-      'decision': decisionData,
+      'teacherDecision': decisionData,
     };
 
     // Use a batch write to update both documents atomically.

@@ -11,18 +11,18 @@ class HomeController extends ChangeNotifier {
   // ---------- Identity ----------
   late String role;
   late String uid;
-  late String name = ''; // Initialize with an empty string
+  late String name = '';
 
   // ---------- Role Checker ----------
   bool get isTeacherOrHead =>
-      role == 'teacher' || role == 'program_head' || role == 'academic_head';
+      role == 'teacher' || role == 'program_head';
 
   // ---------- Display chips / labels ----------
   String? courseRaw;
   String? departmentRaw;
-  String? course;       // acronym (e.g., BSIT)
-  String? section;      // e.g., "BSIT-4103"
-  String? department;   // acronym (e.g., IT)
+  String? course;
+  String? section;
+  String? department;
 
   // ---------- Notes & unread ----------
   String noteText = 'Tap to write notes';
@@ -36,32 +36,25 @@ class HomeController extends ChangeNotifier {
 
   // ---------- Today schedules exposed to UI ----------
   List<ScheduleItem> todaySchedules = const [];
+  StreamSubscription<List<ScheduleItem>>? _schedulesSub;
 
   // ---------- Chip Details Data ----------
   InstructorDetails? _instructorDetails;
   List<SectionStudent>? _sectionRoster;
   List<ScheduleItem>? _roomSchedule;
 
-  /// Initialize controller with role/uid/name and load initial data
   Future<void> init({
     required String role,
     required String uid,
-    // **REMOVED**: No longer need to pass names here, we will fetch them.
-    // required String firstName,
-    // required String lastName,
   }) async {
     this.role = role;
     this.uid = uid;
-    // this.name = '$firstName $lastName'; // This was the issue
 
     isLoading = true;
     notifyListeners();
 
     try {
       final user = await _service.fetchUserDetails(role: role, uid: uid) ?? {};
-
-      // **THE FIX IS HERE**: Combine the name using the fresh data from Firestore.
-      // We use the helper function from home_UI.dart for consistency.
       this.name = combineName(user, fallback: 'User');
 
       courseRaw     = user['courseName']?.toString();
@@ -83,40 +76,47 @@ class HomeController extends ChangeNotifier {
         if (hasListeners) notifyListeners();
       });
 
-      await initTodaySchedulesAuto();
+      initTodaySchedulesRealtime();
     } catch (e, s) {
       debugPrint("[HomeController] CRITICAL ERROR during init: $e\n$s");
-      this.name = 'Error Loading Name'; // Show an error name if init fails
+      this.name = 'Error Loading Name';
     } finally {
       isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Loads today's schedules based on the user's role.
-  Future<void> initTodaySchedulesAuto() async {
+  void initTodaySchedulesRealtime() {
     if (isLoadingSchedules) return;
     isLoadingSchedules = true;
     schedulesError = null;
     notifyListeners();
 
-    try {
-      if (isTeacherOrHead) {
-        todaySchedules = await _service.fetchSchedulesForTeacher(teacherUid: uid);
-      } else {
-        todaySchedules = await _service.fetchSchedulesForStudent(role: role, uid: uid);
+    _schedulesSub?.cancel();
+
+    final stream = isTeacherOrHead
+        ? _service.streamSchedulesForTeacher(teacherUid: uid)
+        : _service.streamSchedulesForStudent(role: role, uid: uid);
+
+    _schedulesSub = stream.listen((schedules) {
+      todaySchedules = schedules;
+      schedulesError = null;
+      if (isLoadingSchedules) {
+        isLoadingSchedules = false;
       }
-    } catch (e) {
+      if (hasListeners) notifyListeners();
+    }, onError: (e, s) {
+      debugPrint("[HomeController] CRITICAL ERROR during schedule streaming: $e\n$s");
       schedulesError = e.toString();
       todaySchedules = const [];
-    } finally {
       isLoadingSchedules = false;
-      notifyListeners();
-    }
+      if (hasListeners) notifyListeners();
+    });
   }
 
   Future<void> refreshToday() async {
-    await initTodaySchedulesAuto();
+    // Re-initialize the stream for a manual refresh.
+    initTodaySchedulesRealtime();
   }
 
   // ----------------------- Chip Actions -----------------------
@@ -131,11 +131,11 @@ class HomeController extends ChangeNotifier {
     return _sectionRoster;
   }
 
+  // **THE FIX**: Pass today's date to the service.
   Future<List<ScheduleItem>?> viewRoomSchedule(String roomName) async {
-    _roomSchedule = await _service.fetchSchedulesForRoom(roomName);
+    _roomSchedule = await _service.fetchSchedulesForRoom(roomName: roomName, forDate: DateTime.now());
     return _roomSchedule;
   }
-
 
   // ----------------------- Notes actions -----------------------
 
@@ -173,6 +173,7 @@ class HomeController extends ChangeNotifier {
   void dispose() {
     _isDisposed = true;
     _unreadSub?.cancel();
+    _schedulesSub?.cancel();
     super.dispose();
   }
 

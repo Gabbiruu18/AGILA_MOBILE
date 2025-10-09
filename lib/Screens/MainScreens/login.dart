@@ -21,7 +21,6 @@ class LoginScreenState extends State<LoginScreen> {
 
   static const _assetPath = 'assets/images/agila_opening.png';
 
-
   @override
   void initState() {
     super.initState();
@@ -30,17 +29,21 @@ class LoginScreenState extends State<LoginScreen> {
 
   Future<void> _loadInitialState() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     setState(() {
       _termsAccepted = prefs.getBool('termsAccepted') ?? false;
     });
 
     if (!_termsAccepted) {
-      Future.delayed(Duration.zero, () {
-        showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (_) => const TermsDialog(),
-        );
+      // Use a post-frame callback to safely show a dialog after the first build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          showDialog(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => const TermsDialog(),
+          );
+        }
       });
     }
   }
@@ -57,90 +60,72 @@ class LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      //backgroundColor: const Color(0xFFF6F7FB),
       body: Stack(
         children: [
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 32),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset(
-                    _assetPath,
-                    width: 150,
-                    fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
-                  ),
-                  /*RichText(
-                    text: TextSpan(
+              // --- 1. IMPROVED LAYOUT: Prevents overflow on small screens ---
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Image.asset(
+                      _assetPath,
+                      width: 150,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'AI-Driven General Identification and Logging Attendance',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(fontSize: 14, color: Theme.of(context).colorScheme.primary),
+                    ),
+                    const SizedBox(height: 32),
+                    _buildTextField("School Email", idController, "example.000000@caloocan.sti.edu.ph"),
+                    const SizedBox(height: 16),
+                    _buildTextField("Password", passwordController, "", isPassword: true),
+                    const SizedBox(height: 16),
+                    Row(
                       children: [
-                        TextSpan(
-                          text: 'A',
-                          style: GoogleFonts.poppins(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFFFBB43C),
-                          ),
+                        Checkbox(
+                          value: _rememberMe,
+                          activeColor: Theme.of(context).colorScheme.primary,
+                          onChanged: (val) {
+                            setState(() {
+                              _rememberMe = val ?? false;
+                            });
+                          },
                         ),
-                        TextSpan(
-                          text: 'GILA',
-                          style: GoogleFonts.poppins(
-                            fontSize: 48,
-                            fontWeight: FontWeight.bold,
-                            color: const Color(0xFF0058CE),
-                          ),
-                        ),
+                        const SizedBox(width: 4),
+                        Text("Remember Me", style: GoogleFonts.poppins(fontSize: 14)),
                       ],
                     ),
-                  ),*/
-                  const SizedBox(height: 4),
-                  Text(
-                    'AI-Driven General Identification and Logging Attendance',
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(fontSize: 14, color: Theme.of(context).colorScheme.primary),
-                  ),
-                  const SizedBox(height: 32),
-                  _buildTextField("School Email", idController, "example.000000@caloocan.sti.edu.ph"),
-                  const SizedBox(height: 16),
-                  _buildTextField("Password", passwordController, "", isPassword: true),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Checkbox(
-                        value: _rememberMe,
-                        activeColor: Theme.of(context).colorScheme.primary,
-                        onChanged: (val) {
-                          setState(() {
-                            _rememberMe = val ?? false;
-                          });
-                        },
-                      ),
-                      const SizedBox(width: 4),
-                      Text("Remember Me", style: GoogleFonts.poppins(fontSize: 14)),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  _buildLoginButton(),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Checkbox(
-                        value: _termsAccepted,
-                        activeColor: Theme.of(context).colorScheme.primary,
-                        onChanged: _toggleTerms,
-                      ),
-                      const SizedBox(width: 4),
-                      Text("I accept the terms and conditions", style: GoogleFonts.poppins(fontSize: 14)),
-                    ],
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    _buildLoginButton(),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Checkbox(
+                          value: _termsAccepted,
+                          activeColor: Theme.of(context).colorScheme.primary,
+                          onChanged: _toggleTerms,
+                        ),
+                        const SizedBox(width: 4),
+                        Text("I accept the terms and conditions", style: GoogleFonts.poppins(fontSize: 14)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
+          // --- 2. ENHANCED LOADING INDICATOR: Adds a scrim for better UX ---
           if (_isLoading)
             Container(
+              color: Colors.black.withOpacity(0.5),
               child: Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary)),
             ),
         ],
@@ -155,8 +140,9 @@ class LoginScreenState extends State<LoginScreen> {
       decoration: InputDecoration(
         labelText: label,
         hintText: hintText,
-        hintStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+        hintStyle: TextStyle(color: Theme.of(context).colorScheme.primary.withOpacity(0.5)),
         labelStyle: TextStyle(color: Theme.of(context).colorScheme.primary),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Theme.of(context).colorScheme.primary, width: 2),
@@ -193,37 +179,27 @@ class LoginScreenState extends State<LoginScreen> {
             : () async {
           FocusScope.of(context).unfocus();
           if (!_termsAccepted) {
-            showDialog(
-              context: context,
-              barrierDismissible: false,
-              builder: (_) => const TermsDialog(),
-            );
+            showDialog(context: context, barrierDismissible: false, builder: (_) => const TermsDialog());
             return;
           }
 
-          setState(() {
-            _isLoading = true;
-          });
+          setState(() => _isLoading = true);
 
-          if (_rememberMe) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setBool('rememberMe', true);
-            await prefs.setString('rememberedEmail', idController.text.trim());
-          }
-
+          // --- 3. CLEANED UP LOGIC ---
+          // The `AuthServices` class now handles all the logic for "Remember Me".
           await AuthServices.login(
             idController.text.trim(),
             passwordController.text.trim(),
+            _rememberMe,
             context,
           );
 
-          setState(() {
-            _isLoading = false;
-          });
+          // --- 4. ROBUSTNESS: Prevents errors if user navigates away ---
+          if (mounted) {
+            setState(() => _isLoading = false);
+          }
         },
-        child: Text('LOGIN',
-            style: GoogleFonts.poppins(
-                fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+        child: Text('LOGIN', style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
       ),
     );
   }

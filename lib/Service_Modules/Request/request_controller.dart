@@ -174,13 +174,19 @@ class RequestController {
     final data = doc.data() as Map<String, dynamic>;
     final type = (data['type'] ?? 'Unknown').toString();
     final status = (data['status'] ?? 'Pending').toString();
-    final ts = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final senderUid = (data['senderUid'] ?? '').toString();
-    final senderRole = (data['role'] ?? '').toString();
-    final fromName = (data['name'] ?? data['fromName'] ?? 'Unknown').toString();
-    final toName = (data['to'] ?? '—').toString();
+    final ts = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
-    final decision = data['decision'] as Map<String, dynamic>?;
+    final senderRole = (data['role'] ?? '').toString();
+    final recipientRole = (data['recipientRole'] ?? '').toString();
+
+    final senderRoleKey = senderRole.isNotEmpty ? senderRole[0].toUpperCase() + senderRole.substring(1) : '';
+    final recipientRoleKey = recipientRole.isNotEmpty ? recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '') : '';
+
+    final fromName = (data['from${senderRoleKey}Name'] ?? 'Unknown').toString();
+    final toName = (data['to${recipientRoleKey}Name'] ?? '—').toString();
+    final senderUid = (data['from${senderRoleKey}Id'] ?? '').toString();
+
+    final decision = data['teacherDecision'] as Map<String, dynamic>?;
     final remarks = (decision?['remarks'] ?? '').toString();
 
     final isSentView = (showSent || !isStaff);

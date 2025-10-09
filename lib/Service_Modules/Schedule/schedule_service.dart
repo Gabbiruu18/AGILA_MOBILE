@@ -15,6 +15,7 @@ class Session {
   final int endMinutes;
   final int colorHex;
   final String instructorId;
+  final String? instructorName;
 
   const Session({
     required this.id,
@@ -26,6 +27,7 @@ class Session {
     required this.endMinutes,
     required this.colorHex,
     required this.instructorId,
+    this.instructorName,
   });
 }
 
@@ -43,48 +45,97 @@ class RoomSchedule {
   RoomSchedule({required this.subjectName, required this.professor, required this.sectionName, required this.time});
 }
 
-
 // ============================ SERVICE ============================
 
 abstract class ScheduleService {
-  Future<Map<int, List<Session>>> fetchWeek({required String uid});
-  Future<List<SectionStudent>> fetchStudentsForSection(String sectionName);
-  Future<List<RoomSchedule>> fetchSchedulesForRoom(String roomName);
+  Future<Map<int, List<Session>>> fetchWeek({required String uid, required String role});
+  Future<List<SectionStudent>> fetchStudentsForSection({required String sectionName});
+  Future<List<RoomSchedule>> fetchSchedulesForRoom({required String roomName, required DateTime forDate});
 }
 
 class FirestoreScheduleService implements ScheduleService {
   final FirebaseFirestore _db;
   FirestoreScheduleService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
 
+  // ==================== NEW: Independent Academic Logic ====================
+
+  /// **NEW LOGIC**: Finds the currently active academic year and semester,
+  /// without needing to check the user's document first.
+  Future<Map<String, String>?> _findActiveAcademicIds() async {
+    // 1. Find the active academic year.
+    final yearQuery = _db.collection('academic_years').where('status', isEqualTo: 'Active').limit(1);
+    final yearSnap = await yearQuery.get();
+
+    if (yearSnap.docs.isEmpty) {
+      debugPrint("[ScheduleService] VALIDATION FAILED: No 'Active' academic year found in the database.");
+      return null;
+    }
+    final activeYearId = yearSnap.docs.first.id;
+
+    // 2. Find the active semester within that year.
+    final semesterQuery = _db.collection('academic_years').doc(activeYearId).collection('semesters').where('status', isEqualTo: 'Active').limit(1);
+    final semesterSnap = await semesterQuery.get();
+
+    if (semesterSnap.docs.isEmpty) {
+      debugPrint("[ScheduleService] VALIDATION FAILED: No 'Active' semester found within the active year '$activeYearId'.");
+      return null;
+    }
+    final activeSemesterId = semesterSnap.docs.first.id;
+
+    debugPrint("[ScheduleService] Found active term: Year '$activeYearId', Semester '$activeSemesterId'.");
+    return {'academicYearId': activeYearId, 'semesterId': activeSemesterId};
+  }
+
+  // ==================== Main Service Methods ====================
+
   @override
-  Future<Map<int, List<Session>>> fetchWeek({required String uid}) async {
-    final query = _db.collectionGroup('schedules').where('instructorId', isEqualTo: uid);
-    try {
-      final snap = await query.get();
-      final itemsWithData = await Future.wait(snap.docs.map((doc) async {
-        String? sectionName;
-        final sectionDocRef = doc.reference.parent.parent;
-        if (sectionDocRef != null) {
-          final sectionDoc = await sectionDocRef.get();
-          sectionName = _strOrNull(sectionDoc.data()?['sectionName']);
-        }
-        return _mapDocToSessions(doc, sectionName: sectionName);
-      }));
-      final groupedByWeekday = <int, List<Session>>{};
-      final allSessions = itemsWithData.expand((sessions) => sessions);
-      for (final session in allSessions) {
-        (groupedByWeekday[session.weekday] ??= []).add(session);
+  Future<Map<int, List<Session>>> fetchWeek({required String uid, required String role}) async {
+    // **THE FIX**: The service now finds the globally active IDs.
+    final academicIds = await _findActiveAcademicIds();
+    if (academicIds == null) {
+      debugPrint("[ScheduleService] Cannot fetch week. No active academic term found.");
+      // Provide a more specific error message to the user.
+      throw Exception('No active academic term is set. Please contact an administrator.');
+    }
+
+    final bool isTeacher = role == 'teacher' || role == 'program_head';
+
+    if (isTeacher) {
+      final query = _db.collectionGroup('schedules').where('instructorId', isEqualTo: uid);
+      try {
+        final snap = await query.get();
+        // Further filter to ensure schedules are within the active academic period
+        final activeSchedules = snap.docs.where((doc) {
+          final path = doc.reference.path;
+          return path.contains(academicIds['academicYearId']!) && path.contains(academicIds['semesterId']!);
+        }).toList();
+
+        debugPrint("[ScheduleService] Found ${activeSchedules.length} schedules for teacher '$uid' in the active semester.");
+
+        final itemsWithData = await Future.wait(activeSchedules.map((doc) async {
+          String? sectionName;
+          final sectionDocRef = doc.reference.parent.parent;
+          if (sectionDocRef != null) {
+            final sectionDoc = await sectionDocRef.get();
+            sectionName = _strOrNull(sectionDoc.data()?['sectionName']);
+          }
+          return _mapDocToSessions(doc, sectionName: sectionName);
+        }));
+
+        return _groupSessionsByWeekday(itemsWithData);
+      } catch (e, s) {
+        debugPrint("[ScheduleService] CRITICAL ERROR in fetchWeek: $e\n$s");
+        throw Exception('Failed to load schedules.');
       }
-      groupedByWeekday.values.forEach((list) => list.sort((a, b) => a.startMinutes.compareTo(b.startMinutes)));
-      return groupedByWeekday;
-    } catch (e, s) {
-      debugPrint("[ScheduleService] CRITICAL ERROR in fetchWeek: $e\n$s");
-      throw Exception('Failed to load schedules.');
+    } else {
+      debugPrint("[ScheduleService] Student schedule logic in ScheduleService is not implemented.");
+      return {};
     }
   }
 
   @override
-  Future<List<SectionStudent>> fetchStudentsForSection(String sectionName) async {
+  Future<List<SectionStudent>> fetchStudentsForSection({required String sectionName}) async {
+    // This logic remains the same.
     try {
       final query = _db.collectionGroup('accounts').where('role', isEqualTo: 'Student').where('sectionName', isEqualTo: sectionName);
       final snap = await query.get();
@@ -103,10 +154,16 @@ class FirestoreScheduleService implements ScheduleService {
   }
 
   @override
-  Future<List<RoomSchedule>> fetchSchedulesForRoom(String roomName) async {
+  Future<List<RoomSchedule>> fetchSchedulesForRoom({required String roomName, required DateTime forDate}) async {
+    // This logic remains the same.
     try {
-      final todayKey = DateFormat('EEEE').format(DateTime.now()).toLowerCase();
-      final query = _db.collectionGroup('schedules').where('roomName', isEqualTo: roomName).where('days', arrayContains: todayKey);
+      final dayKey = DateFormat('EEEE').format(forDate).toLowerCase();
+      debugPrint("[ScheduleService] Fetching schedules for room '$roomName' on '$dayKey'.");
+
+      final query = _db.collectionGroup('schedules')
+          .where('roomName', isEqualTo: roomName)
+          .where('days', arrayContains: dayKey);
+
       final snap = await query.get();
       final itemsWithSections = await Future.wait(snap.docs.map((doc) async {
         String? sectionName;
@@ -134,7 +191,18 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // Helper methods
+  // ============================ HELPERS ============================
+
+  Map<int, List<Session>> _groupSessionsByWeekday(List<List<Session>> itemsWithData) {
+    final groupedByWeekday = <int, List<Session>>{};
+    final allSessions = itemsWithData.expand((sessions) => sessions);
+    for (final session in allSessions) {
+      (groupedByWeekday[session.weekday] ??= []).add(session);
+    }
+    groupedByWeekday.values.forEach((list) => list.sort((a, b) => a.startMinutes.compareTo(b.startMinutes)));
+    return groupedByWeekday;
+  }
+
   List<Session> _mapDocToSessions(QueryDocumentSnapshot<Map<String, dynamic>> d, {String? sectionName}) {
     final data = d.data();
     final days = (data['days'] as List<dynamic>?)?.map((day) => _dayNameToWeekday(day.toString())).where((d) => d != -1).toList() ?? [];
@@ -151,6 +219,7 @@ class FirestoreScheduleService implements ScheduleService {
         endMinutes: _parseTimeToMinutes(endStr),
         colorHex: _parseColorHex(data['color']),
         instructorId: (data['instructorId'] ?? '').toString(),
+        instructorName: (data['instructorName'] ?? '').toString(),
       );
     }).toList();
   }

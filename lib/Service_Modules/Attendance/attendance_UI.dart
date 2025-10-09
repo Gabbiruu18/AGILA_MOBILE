@@ -1,22 +1,13 @@
-
 import 'package:flutter/material.dart';
 import 'attendance_service.dart';
 
 // ---- UI helpers ----
-
-// Cards use neutral surfaces from the theme (no blue tint).
 BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
   final cs = Theme.of(context).colorScheme;
   return BoxDecoration(
     color: bg ?? cs.surface,
     borderRadius: BorderRadius.circular(12),
-    boxShadow: [
-      BoxShadow(
-        blurRadius: 10,
-        offset: const Offset(0, 4),
-        color: cs.onSurface.withOpacity(0.06),
-      ),
-    ],
+    boxShadow: [BoxShadow(blurRadius: 10, offset: const Offset(0, 4), color: cs.onSurface.withOpacity(0.06))],
   );
 }
 
@@ -28,10 +19,10 @@ String fmt(TimeOfDay t) {
 }
 String fmtRange(TimeOfDay a, TimeOfDay b) => "${fmt(a)}–${fmt(b)}";
 
-// Status → chip colors (kept simple & readable on both modes)
 Color statusBg(SessStatus? st) {
   if (st == null) return Colors.grey.shade200;
   switch (st) {
+    case SessStatus.scheduled: return const Color(0xFFDCECFF); // Blue for scheduled
     case SessStatus.present:
     case SessStatus.excused: return const Color(0xFFDCF5E7);
     case SessStatus.late:    return const Color(0xFFFFF1CC);
@@ -41,6 +32,7 @@ Color statusBg(SessStatus? st) {
 Color statusFg(SessStatus? st) {
   if (st == null) return Colors.grey.shade600;
   switch (st) {
+    case SessStatus.scheduled: return const Color(0xFF0058CE);
     case SessStatus.present:
     case SessStatus.excused: return const Color(0xFF1E7E34);
     case SessStatus.late:    return const Color(0xFF9A6B00);
@@ -59,17 +51,7 @@ class PeriodSwitcher extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Row(children: [
       IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
-      Expanded(
-        child: Center(
-          child: Text(
-            label,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              fontWeight: FontWeight.w700,
-              color: cs.primary,
-            ),
-          ),
-        ),
-      ),
+      Expanded(child: Center(child: Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)))),
       IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right)),
     ]);
   }
@@ -77,7 +59,10 @@ class PeriodSwitcher extends StatelessWidget {
 
 // ----- Stat Card -----
 class StatCard extends StatelessWidget {
-  final String label; final int value; final IconData icon; final Color tint;
+  final String label;
+  final int value;
+  final IconData icon;
+  final Color tint;
   const StatCard({super.key, required this.label, required this.value, required this.icon, required this.tint});
   @override
   Widget build(BuildContext context) {
@@ -86,7 +71,7 @@ class StatCard extends StatelessWidget {
       width: 110,
       padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
       decoration: BoxDecoration(
-          color:  cs.surface,
+        color: cs.surface,
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -117,6 +102,7 @@ class StatCard extends StatelessWidget {
   }
 }
 
+
 // ----- Section Title with lines -----
 class LinedTitle extends StatelessWidget {
   final String text;
@@ -128,12 +114,7 @@ class LinedTitle extends StatelessWidget {
       const Expanded(child: ThinLine()),
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12),
-        child: Text(
-          text,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: cs.primary, fontWeight: FontWeight.w700, fontSize: 14,
-          ),
-        ),
+        child: Text(text, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary, fontWeight: FontWeight.w700, fontSize: 14)),
       ),
       const Expanded(child: ThinLine()),
     ]);
@@ -142,61 +123,49 @@ class LinedTitle extends StatelessWidget {
 class ThinLine extends StatelessWidget {
   const ThinLine({super.key});
   @override
-  Widget build(BuildContext context) =>
-      Container(height: 1.2, color: Theme.of(context).colorScheme.outlineVariant);
+  Widget build(BuildContext context) => Container(height: 1.2, color: Theme.of(context).colorScheme.outlineVariant);
 }
 
-/* ===== Daily list ===== */
-class DailyList extends StatelessWidget {
+// ===== Daily list (NEW - Interactive Cards) =====
+class DailyListScheduleLike extends StatelessWidget {
   final List<SubjectDayGroup> groups;
-  const DailyList({super.key, required this.groups});
+  final void Function(Session session) onViewDetails;
+
+  const DailyListScheduleLike({super.key, required this.groups, required this.onViewDetails});
+
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    if (groups.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: cardDeco(context),
-        child: const Text("No classes today."),
-      );
+    final items = groups.expand((g) => g.sessions.map((s) => (g, s))).toList();
+
+    if (items.isEmpty) {
+      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No classes scheduled for this day.")));
     }
-    return ListView.builder(
-      itemCount: groups.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (context, i) {
-        final g = groups[i];
-        final anyLab = g.sessions.any((s) => s.kind != null);
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.all(16),
-          decoration: cardDeco(
-            context,
-            bg: anyLab ? cs.surfaceContainerHighest : cs.surface,
-          ),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              g.subjectDisplay,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8, runSpacing: 8,
-              children: g.sessions.map((s) {
-                final label = fmtRange(s.start, s.end);
-                return Chip(
-                  label: Text(label, style: Theme.of(context).textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  backgroundColor: cs.surface,
-                  shape: StadiumBorder(side: BorderSide(color: cs.outlineVariant)),
-                );
-              }).toList(),
-            ),
-          ]),
+
+    return ListView.separated(
+      itemCount: items.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      itemBuilder: (ctx, i) {
+        final group = items[i].$1;
+        final session = items[i].$2;
+        return TodayScheduleCard(
+          subject: displayName(session),
+          section: session.section,
+          room: session.room,
+          timeLabel: fmtRange(session.start, session.end),
+          statusLabel: 'Scheduled',
+          statusBg: statusBg(SessStatus.scheduled),
+          statusFg: statusFg(SessStatus.scheduled),
+          accentColor: _subjectAccent(displayName(session)),
+          onViewDetails: () => onViewDetails(session),
         );
       },
     );
   }
 }
 
-/* ===== Weekly list (colored day chips) ===== */
+// ===== Weekly list =====
 class WeeklyList extends StatelessWidget {
   final List<SubjectWeekItem> items;
   const WeeklyList({super.key, required this.items});
@@ -204,63 +173,37 @@ class WeeklyList extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Text("No subjects scheduled this week."));
+      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this week.")));
     }
     return ListView.builder(
-      itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (context, i) {
-        final it = items[i];
-        const days = ["M", "T", "W", "Th", "F"];
-        final pct = it.total == 0 ? 0.0 : it.attended / it.total;
-        final isLabLike = it.subjectDisplay.endsWith("(Lab)") || it.subjectDisplay.endsWith("(ComLab)");
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.all(16),
-          decoration: cardDeco(context, bg: isLabLike ? cs.surface : cs.surface),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-              Text("${it.attended}/${it.total}", style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-            ]),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                minHeight: 8,
-                value: pct,
-                backgroundColor: cs.surfaceContainerHighest,
-                valueColor: AlwaysStoppedAnimation(cs.primary),
-              ),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: List.generate(5, (i) {
-                final st = it.statuses[i]; // SeesStatus? for this day
-                return Container(
-                  margin: const EdgeInsets.only(right: 6),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusBg(st),
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: cs.outlineVariant),
-                  ),
-                  child: Text(
-                    days[i],
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      fontSize: 11, fontWeight: FontWeight.w700, color: statusFg(st),
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ]),
-        );
-      },
-    );
+        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+        itemBuilder: (context, i) {
+          final it = items[i];
+          const days = ["M", "T", "W", "Th", "F"];
+          return Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(16),
+              decoration: cardDeco(context),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 10),
+                Row(
+                  children: List.generate(5, (i) {
+                    final st = it.statuses[i];
+                    return Container(
+                      margin: const EdgeInsets.only(right: 6),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(color: statusBg(st), borderRadius: BorderRadius.circular(999)),
+                      child: Text(days[i], style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: statusFg(st))),
+                    );
+                  }),
+                ),
+              ]));
+        });
   }
 }
 
-/* ===== Monthly list ===== */
+// ===== Monthly list =====
 class MonthlyList extends StatelessWidget {
   final List<SubjectTotals> items;
   const MonthlyList({super.key, required this.items});
@@ -268,295 +211,212 @@ class MonthlyList extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Text("No monthly data yet."));
+      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this month.")));
     }
     return ListView.builder(
-      itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-      itemBuilder: (context, i) {
-        final it = items[i];
-        final pct = it.total == 0 ? 0.0 : it.attended / it.total;
-        final isLabLike = it.subjectDisplay.endsWith("(Lab)") || it.subjectDisplay.endsWith("(ComLab)");
-        return Container(
-          margin: const EdgeInsets.symmetric(vertical: 6),
-          padding: const EdgeInsets.all(16),
-          decoration: cardDeco(context, bg: isLabLike ? cs.surface : cs.surface),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Row(children: [
-              Expanded(child: Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-              Text("${it.attended}/${it.total}", style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-            ]),
-            const SizedBox(height: 10),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                minHeight: 8,
-                value: pct,
-                backgroundColor: cs.surfaceContainerHighest,
-                valueColor: AlwaysStoppedAnimation(cs.primary),
-              ),
-            ),
-          ]),
-        );
-      },
-    );
+        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+        itemBuilder: (context, i) {
+          final it = items[i];
+          final pct = it.total == 0 ? 0.0 : it.attended / it.total;
+          return Container(
+              margin: const EdgeInsets.symmetric(vertical: 6),
+              padding: const EdgeInsets.all(16),
+              decoration: cardDeco(context),
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Row(children: [
+                  Expanded(child: Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
+                  Text("${it.attended}/${it.total}", style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
+                ]),
+                const SizedBox(height: 10),
+                ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: LinearProgressIndicator(minHeight: 8, value: pct, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation(cs.primary))),
+              ]));
+        });
   }
 }
 
-// ===== Schedule-like "Today" Card for Attendance =====
-
-class _ChipColors {
-  final Color bg;
-  final Color fg;
-  const _ChipColors(this.bg, this.fg);
-}
-
-// Theme-aware "Scheduled" chip
-_ChipColors _chipForScheduled(BuildContext context) {
-  final cs = Theme.of(context).colorScheme;
-  return _ChipColors(cs.primary.withOpacity(0.12), cs.primary);
-}
-
-// Deterministic color bar based on subject name (kept)
+// ===== Today's Schedule Card (from schedule_UI) =====
 Color _subjectAccent(String subject) {
-  const palette = <Color>[
-    Color(0xFF6CA9FF), Color(0xFFFFC66C), Color(0xFF9BE7B1),
-    Color(0xFFB39DDB), Color(0xFFFFAB91), Color(0xFF80CBC4),
-    Color(0xFFA5D6A7), Color(0xFFFFCC80), Color(0xFF90CAF9), Color(0xFFF48FB1),
-  ];
-  var h = 0;
-  for (final c in subject.codeUnits) {
-    h = (h * 31 + c) & 0x7FFFFFFF;
-  }
-  return palette[h % palette.length];
+  const palette = <Color>[Color(0xFF6CA9FF), Color(0xFFFFC66C), Color(0xFF9BE7B1), Color(0xFFB39DDB), Color(0xFFFFAB91), Color(0xFF80CBC4)];
+  return palette[subject.hashCode % palette.length];
 }
 
-class TodayScheduleLikeCard extends StatelessWidget {
-  final String subject;
-  final String section;
-  final String room;
-  final String timeLabel;
-  final String statusLabel;
-  final Color statusBg;
-  final Color statusFg;
-  final Color accentColor;
+class TodayScheduleCard extends StatelessWidget {
+  final String subject, section, room, timeLabel, statusLabel;
+  final Color statusBg, statusFg, accentColor;
   final VoidCallback? onViewDetails;
 
-  const TodayScheduleLikeCard({
-    super.key,
-    required this.subject,
-    required this.section,
-    required this.room,
-    required this.timeLabel,
-    required this.statusLabel,
-    required this.statusBg,
-    required this.statusFg,
-    required this.accentColor,
-    this.onViewDetails,
+  const TodayScheduleCard({
+    super.key, required this.subject, required this.section, required this.room,
+    required this.timeLabel, required this.statusLabel, required this.statusBg,
+    required this.statusFg, required this.accentColor, this.onViewDetails,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
     return Material(
       color: cs.surface,
       borderRadius: BorderRadius.circular(12),
-      child: Container(
-        decoration: BoxDecoration(
-          border: Border.all(color: cs.outlineVariant),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 10, offset: const Offset(0, 4),
-              color: cs.onSurface.withOpacity(0.05),
-            )
-          ],
-        ),
-        child: Row(
-          children: [
-            // Left color bar
-            Container(
-              width: 6, height: 96,
-              decoration: BoxDecoration(
-                color: accentColor,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(12),
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-            ),
+      child: InkWell(
+        onTap: onViewDetails,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(border: Border.all(color: cs.outlineVariant.withOpacity(0.5)), borderRadius: BorderRadius.circular(12)),
+          child: Row(children: [
+            Container(width: 6, height: 96, decoration: BoxDecoration(color: accentColor, borderRadius: const BorderRadius.only(topLeft: Radius.circular(12), bottomLeft: Radius.circular(12)))),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
                 child: Column(
-
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title + status chip
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            subject,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: statusBg,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            statusLabel,
-                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                              color: statusFg,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                    Row(children: [
+                      Expanded(child: Text(subject, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700, fontSize: 15))),
+                      Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: statusBg, borderRadius: BorderRadius.circular(999)), child: Text(statusLabel, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: statusFg, fontWeight: FontWeight.w600, fontSize: 12))),
+                    ]),
                     const SizedBox(height: 6),
-                    // Meta row
-                    Row(
-                      children: [
-                        Icon(Icons.group, size: 16, color: cs.onSurface),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            section,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Icon(Icons.meeting_room, size: 16, color: cs.onSurface),
-                        const SizedBox(width: 4),
-                        Text(room),
-                        const SizedBox(width: 8),
-                        Icon(Icons.access_time, size: 14, color: cs.onSurface),
-                        const SizedBox(width: 2),
-                        Text(timeLabel, style: TextStyle(color: cs.onSurface)),
-                      ],
-                    ),
+                    Row(children: [
+                      Icon(Icons.meeting_room, size: 16, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(room),
+                      const SizedBox(width: 12),
+                      Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
+                      const SizedBox(width: 4),
+                      Text(timeLabel, style: TextStyle(color: cs.onSurfaceVariant)),
+                    ]),
                     const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        icon: const Icon(Icons.visibility_outlined),
-                        label: const Text('Details'),
-                        onPressed: onViewDetails,
-                      ),
-                    ),
+                    SizedBox(width: double.infinity, child: OutlinedButton.icon(icon: const Icon(Icons.visibility_outlined), label: const Text('View Details'), onPressed: onViewDetails)),
                   ],
                 ),
               ),
             ),
-          ],
+          ]),
         ),
       ),
     );
   }
 }
 
-class _DayItem {
-  final SubjectDayGroup g;
-  final dynamic s; // session object with .start and .end
-  _DayItem(this.g, this.s);
-}
+// ===== Session Details Panel (from schedule_UI) =====
+class SessionDetailsPanel extends StatefulWidget {
+  final Session session;
+  final Future<List<SectionStudent>> Function() fetchStudents;
+  final Future<InstructorDetails?> Function() fetchInstructor;
 
-class DailyListScheduleLike extends StatelessWidget {
-  final List<SubjectDayGroup> groups;
-  const DailyListScheduleLike({super.key, required this.groups});
+  const SessionDetailsPanel({super.key, required this.session, required this.fetchStudents, required this.fetchInstructor});
 
   @override
+  State<SessionDetailsPanel> createState() => _SessionDetailsPanelState();
+}
+
+class _SessionDetailsPanelState extends State<SessionDetailsPanel> {
+  @override
   Widget build(BuildContext context) {
-    final List<_DayItem> items = [];
-    for (final g in groups) {
-      for (final s in g.sessions) {
-        items.add(_DayItem(g, s));
-      }
-    }
-
-    if (items.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: cardDeco(context),
-        child: const Text("No classes today."),
-      );
-    }
-
-    return ListView.separated(
-      itemCount: items.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.only(bottom: 8),
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (ctx, i) {
-        final g = items[i].g;
-        final s = items[i].s;
-
-        // theme-aware scheduled chip
-        final chip = _chipForScheduled(ctx);
-
-        return TodayScheduleLikeCard(
-          subject: g.subjectDisplay,
-          section: s.section,
-          room: s.room,
-          timeLabel: fmtRange(s.start, s.end),
-          statusLabel: 'Scheduled',
-          statusBg: chip.bg,
-          statusFg: chip.fg,
-          accentColor: _subjectAccent(g.subjectDisplay),
-          onViewDetails: () {
-            showModalBottomSheet(
-              context: ctx,
-              showDragHandle: true,
-              builder: (_) => Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(g.subjectDisplay, style: Theme.of(ctx).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    _kv(ctx, 'Time', fmtRange(s.start, s.end)),
-                    _kv(ctx, 'Section', s.section),
-                    _kv(ctx, 'Room', s.room),
-                  ],
+    final s = widget.session;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(displayName(s), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 4),
+          Text(s.section, style: Theme.of(context).textTheme.titleSmall),
+          const Divider(height: 24),
+          _kv(context, Icons.schedule, 'Time', fmtRange(s.start, s.end)),
+          _kv(context, Icons.meeting_room_outlined, 'Room', s.room),
+          _kv(context, Icons.person_outline, 'Instructor', s.instructorName),
+          const Divider(height: 24),
+          DefaultTabController(
+            length: 2,
+            child: Column(
+              children: [
+                const TabBar(tabs: [Tab(text: "Instructor"), Tab(text: "Classmates")]),
+                const SizedBox(height: 16),
+                SizedBox(
+                  height: 300, // Constrain height
+                  child: TabBarView(children: [
+                    _buildFutureContent<InstructorDetails?>(
+                      future: widget.fetchInstructor(),
+                      builder: (details) => details == null
+                          ? const Center(child: Text("Instructor details not found."))
+                          : _InstructorDetailsContent(details: details),
+                    ),
+                    _buildFutureContent<List<SectionStudent>>(
+                      future: widget.fetchStudents(),
+                      builder: (students) => students == null || students.isEmpty
+                          ? const Center(child: Text("No classmates found."))
+                          : _SectionRosterContent(students: students),
+                    ),
+                  ]),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+Widget _buildFutureContent<T>({required Future<T> future, required Widget Function(T? data) builder}) {
+  return FutureBuilder<T>(
+    future: future,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.hasError) {
+        return Center(child: Text("Error: ${snapshot.error}"));
+      }
+      return builder(snapshot.data);
+    },
+  );
+}
+
+class _InstructorDetailsContent extends StatelessWidget {
+  final InstructorDetails details;
+  const _InstructorDetailsContent({required this.details});
+  @override
+  Widget build(BuildContext context) {
+    return Column(children: [
+      CircleAvatar(radius: 40, backgroundImage: details.photoURL != null ? NetworkImage(details.photoURL!) : null, child: details.photoURL == null ? const Icon(Icons.person, size: 40) : null),
+      const SizedBox(height: 16),
+      Text(details.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+      if (details.departmentName != null) ...[
+        const SizedBox(height: 4),
+        Text(details.departmentName!, style: Theme.of(context).textTheme.bodyMedium),
+      ],
+    ]);
+  }
+}
+
+class _SectionRosterContent extends StatelessWidget {
+  final List<SectionStudent> students;
+  const _SectionRosterContent({required this.students});
+  @override
+  Widget build(BuildContext context) {
+    return ListView.builder(
+      itemCount: students.length,
+      itemBuilder: (context, index) {
+        final student = students[index];
+        return ListTile(
+          leading: CircleAvatar(backgroundImage: student.photoURL != null ? NetworkImage(student.photoURL!) : null, child: student.photoURL == null ? const Icon(Icons.person) : null),
+          title: Text(student.name),
         );
       },
     );
   }
 }
 
-// small key–value row for the sheet
-Widget _kv(BuildContext context, String k, String v) => Padding(
-  padding: const EdgeInsets.symmetric(vertical: 4),
-  child: Row(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      SizedBox(
-        width: 90,
-        child: Text(
-          k,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w600,
-          ),
-        ),
-      ),
-      const SizedBox(width: 8),
-      Expanded(child: Text(v)),
-    ],
-  ),
+Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
+  padding: const EdgeInsets.symmetric(vertical: 6),
+  child: Row(children: [
+    Icon(icon, size: 20, color: Theme.of(context).colorScheme.secondary),
+    const SizedBox(width: 12),
+    SizedBox(width: 80, child: Text(k, style: const TextStyle(fontWeight: FontWeight.w600))),
+    Expanded(child: Text(v)),
+  ]),
 );
