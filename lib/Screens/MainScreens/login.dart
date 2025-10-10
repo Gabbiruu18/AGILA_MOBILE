@@ -65,7 +65,6 @@ class LoginScreenState extends State<LoginScreen> {
           Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 32),
-              // --- 1. IMPROVED LAYOUT: Prevents overflow on small screens ---
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -122,7 +121,6 @@ class LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          // --- 2. ENHANCED LOADING INDICATOR: Adds a scrim for better UX ---
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.5),
@@ -185,8 +183,6 @@ class LoginScreenState extends State<LoginScreen> {
 
           setState(() => _isLoading = true);
 
-          // --- 3. CLEANED UP LOGIC ---
-          // The `AuthServices` class now handles all the logic for "Remember Me".
           await AuthServices.login(
             idController.text.trim(),
             passwordController.text.trim(),
@@ -194,7 +190,6 @@ class LoginScreenState extends State<LoginScreen> {
             context,
           );
 
-          // --- 4. ROBUSTNESS: Prevents errors if user navigates away ---
           if (mounted) {
             setState(() => _isLoading = false);
           }

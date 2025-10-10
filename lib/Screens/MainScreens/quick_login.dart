@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:pinput/pinput.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // <-- ADD THIS IMPORT
 import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
 import '../../Service_Modules/Login/biometric_util.dart';
 import 'terms.dart';
@@ -30,6 +31,40 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     _loadInitialState();
   }
 
+  // This function checks and updates the FCM token if it has changed.
+  // Replace your existing function with this one.
+  Future<void> _updateFCMToken(String role, String uid) async {
+    try {
+      final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+      final String? newToken = await _firebaseMessaging.getToken();
+
+      if (newToken != null) {
+
+        // --- THIS IS THE CORRECTED FIRESTORE PATH ---
+        final docRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(role) // 'student', 'teacher', etc.
+            .collection('accounts')
+            .doc(uid);
+        // --- END OF CORRECTION ---
+
+        final userDoc = await docRef.get();
+
+        // Only write to Firestore if the document doesn't exist yet,
+        // or if the token has actually changed. This saves unnecessary database writes.
+        if (!userDoc.exists || userDoc.data()?['fcmToken'] != newToken) {
+          debugPrint('FCM Token is new or has been refreshed. Updating in Firestore.');
+          await docRef.update({
+            'fcmToken': newToken,
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error updating FCM token during quick login: $e');
+    }
+  }
+
   Future<void> _loadInitialState() async {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString('rememberedEmail');
@@ -41,7 +76,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       return;
     }
 
-    // --- THE FIX: Check for both preference and device capability ---
     final hasEnabledBiometrics = prefs.getBool('biometric_enabled_for_uid_$uid') ?? false;
     final canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
 
@@ -49,7 +83,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       rememberedEmail = email;
       rememberedUid = uid;
       _termsAccepted = terms;
-      // The button should only be visible if the user enabled it AND the device supports it.
       _isBiometricAvailableForThisUser = hasEnabledBiometrics && canCheckBiometrics;
     });
 
@@ -58,7 +91,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
   Future<void> _fetchUserDetailsFromFirestore(String uid) async {
     try {
-      const roles = ['student', 'teacher', 'program_head'];
+      const roles = ['student', 'teacher', 'program_head', 'academic_head'];
       DocumentSnapshot<Map<String, dynamic>>? userDoc;
 
       for (final role in roles) {
@@ -216,6 +249,9 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
 
       if (authorized && mounted) {
+        // After a successful quick login, check if the FCM token needs an update.
+        await _updateFCMToken(userRole!, rememberedUid!);
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(

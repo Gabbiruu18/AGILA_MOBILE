@@ -549,22 +549,39 @@ class RequestDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // --- Start of fix ---
+    // Safely parse sender and recipient info
+    String senderRole = data['role'] ?? '';
+    String recipientRole = data['recipientRole'] ?? '';
+
+    // Fallback for older documents: Intelligently find roles from keys
+    if (senderRole.isEmpty) {
+      final fromKey = data.keys.firstWhere((k) => k.startsWith('from') && k.endsWith('Id'), orElse: () => '');
+      if (fromKey.isNotEmpty) {
+        senderRole = fromKey.replaceAll('from', '').replaceAll('Id', '').toLowerCase();
+      }
+    }
+    if (recipientRole.isEmpty) {
+      final toKey = data.keys.firstWhere((k) => k.startsWith('to') && k.endsWith('Id'), orElse: () => '');
+      if (toKey.isNotEmpty) {
+        recipientRole = toKey.replaceAll('to', '').replaceAll('Id', '').toLowerCase();
+      }
+    }
+
+    final senderRoleKey = senderRole.isNotEmpty ? senderRole[0].toUpperCase() + senderRole.substring(1) : '';
+    final recipientRoleKey = recipientRole.isNotEmpty ? recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '') : '';
+
+    final fromName = data['from${senderRoleKey}Name'] ?? 'Unknown';
+    final toName = data['to${recipientRoleKey}Name'] ?? '—';
+    // --- End of fix ---
+
     final type = (data['type'] ?? 'Unknown').toString();
     final status = (data['status'] ?? 'Pending').toString();
     final ts = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
     final reason = (data['reason'] ?? '').toString();
 
-    final decision = data['decision'] as Map<String, dynamic>?;
-    final decisionRemarks = (decision?['remarks'] ?? '').toString();
-
-    final senderRole = (data['role'] ?? '').toString();
-    final recipientRole = (data['recipientRole'] ?? '').toString();
-
-    final senderRoleKey = senderRole.isNotEmpty ? senderRole[0].toUpperCase() + senderRole.substring(1) : '';
-    final recipientRoleKey = recipientRole.isNotEmpty ? recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '') : '';
-
-    final fromName = (data['from${senderRoleKey}Name'] ?? 'Unknown').toString();
-    final toName = (data['to${recipientRoleKey}Name'] ?? '—').toString();
+    final decision = data['teacherDecision'] as Map<String, dynamic>? ?? {};
+    final decisionRemarks = (decision['remarks'] ?? '').toString();
 
     final attachments = (data['attachments'] as List<dynamic>?) ?? [];
 

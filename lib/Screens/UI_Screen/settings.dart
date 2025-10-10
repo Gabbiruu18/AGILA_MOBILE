@@ -30,7 +30,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   void initState() {
     super.initState();
-    _settingsCtrl = SettingsController()..load(); // This now loads everything
+    _settingsCtrl = SettingsController()..load();
   }
 
   @override
@@ -50,7 +50,7 @@ class _SettingsSheetState extends State<_SettingsSheet> {
     final cs = Theme.of(context).colorScheme;
 
     return AnimatedBuilder(
-      animation: Listenable.merge([_themeCtrl, _settingsCtrl]), // Only listen to these two
+      animation: Listenable.merge([_themeCtrl, _settingsCtrl]),
       builder: (context, _) {
         final isDark = switch (_themeCtrl.mode) {
           ThemeMode.dark => true,
@@ -102,8 +102,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ],
                 ),
               ),
-
-              // --- Quick Login Settings ---
               Card(
                 child: Column(
                   children: [
@@ -135,6 +133,23 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ],
                 ),
               ),
+
+              // --- ADDED: Notification Settings Card ---
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: Text("Notifications", style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ),
+                    SwitchListTile.adaptive(
+                      title: const Text("Receive Notifications"),
+                      value: _settingsCtrl.notificationsEnabled,
+                      onChanged: (value) => _settingsCtrl.toggleNotifications(value),
+                    ),
+                  ],
+                ),
+              ),
+              // --- END ADDED ---
 
               Card(
                 child: ListTile(

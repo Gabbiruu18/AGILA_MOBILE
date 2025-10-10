@@ -11,21 +11,71 @@ import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Screens/Theme/theme_scope.dart';
 
+// --- ADDED: Import the necessary notification packages ---
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+// ---------------------------------------------------------
+
+// --- ADDED: Create an instance of the local notifications plugin ---
+final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+// -----------------------------------------------------------------
+
+// --- ADDED: This function sets up everything for foreground notifications ---
+Future<void> setupForegroundNotifications() async {
+  // 1. Create a Notification Channel for Android (required for Android 8.0+)
+  const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    'high_importance_channel', // A unique ID for the channel
+    'High Importance Notifications', // A user-visible name for the channel
+    description: 'This channel is used for important notifications.',
+    importance: Importance.high,
+  );
+
+  // 2. Initialize the local notifications plugin
+  await flutterLocalNotificationsPlugin
+      .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(channel);
+
+  // 3. Set up the listener for incoming foreground messages
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    RemoteNotification? notification = message.notification;
+    AndroidNotification? android = message.notification?.android;
+
+    // If the message has a notification payload, show it as a local notification
+    if (notification != null && android != null) {
+      flutterLocalNotificationsPlugin.show(
+        notification.hashCode,
+        notification.title,
+        notification.body,
+        NotificationDetails(
+          android: AndroidNotificationDetails(
+            channel.id,
+            channel.name,
+            channelDescription: channel.description,
+            // IMPORTANT: 'launch_background' must be a file in android/app/src/main/res/drawable
+            icon: 'launch_background',
+          ),
+        ),
+      );
+    }
+  });
+}
+// -------------------------------------------------------------------------
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
 
+  // --- ADDED: Call the setup function when the app starts ---
+  await setupForegroundNotifications();
+  // -------------------------------------------------------
+
   // --- 2. SECURITY NOTE FOR PRODUCTION ---
-  // Before releasing your app, you MUST replace the .debug providers
-  // with the production providers (e.g., AndroidProvider.playIntegrity).
   await FirebaseAppCheck.instance.activate(
-    webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'), // Replace with your actual key
+    webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'),
     androidProvider: AndroidProvider.debug,
     appleProvider: AppleProvider.debug,
   );
 
-  // Consider moving permission requests to be "just-in-time" (when they are needed)
-  // instead of requesting them all on startup.
   await requestPermissions();
 
   final themeCtrl = ThemeController();
@@ -58,20 +108,12 @@ class MyApp extends StatelessWidget {
             '/opening': (context) => const OpeningScreen(),
             '/': (context) => const LoginScreen(),
             '/quick-login': (context) => const QuickLoginScreen(),
-            //'/face-recognition-tester': (context) => const FaceRecognitionTesterScreen(),
-
-            // --- 1. CRASH-PROOF NAVIGATION ---
             '/home': (context) {
               final args = ModalRoute.of(context)?.settings.arguments;
-
-              // Defensive check: If arguments are missing or not a Map,
-              // gracefully redirect to the login screen to prevent a crash.
               if (args == null || args is! Map) {
                 debugPrint("Error: /home route was pushed without valid arguments. Redirecting to login.");
                 return const LoginScreen();
               }
-
-              // Safely access arguments with default values to prevent null errors.
               return HomeScreen(
                 role: args['role'] ?? 'default_role',
                 name: args['name'] ?? 'Unknown User',

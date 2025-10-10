@@ -40,20 +40,73 @@ Color statusFg(SessStatus? st) {
   }
 }
 
-// ----- Period Switcher -----
-class PeriodSwitcher extends StatelessWidget {
+// ✅ NEW: EnhancedPeriodSwitcher with Date Picker and Today button
+class EnhancedPeriodSwitcher extends StatelessWidget {
   final String label;
   final VoidCallback onPrev;
   final VoidCallback onNext;
-  const PeriodSwitcher({super.key, required this.label, required this.onPrev, required this.onNext});
+  final VoidCallback onLabelTap;
+  final VoidCallback onTodayTap;
+  final bool showNext;
+  final bool showTodayButton;
+
+  const EnhancedPeriodSwitcher({
+    super.key,
+    required this.label,
+    required this.onPrev,
+    required this.onNext,
+    required this.onLabelTap,
+    required this.onTodayTap,
+    required this.showNext,
+    required this.showTodayButton,
+  });
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Row(children: [
-      IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
-      Expanded(child: Center(child: Text(label, style: Theme.of(context).textTheme.labelLarge?.copyWith(fontWeight: FontWeight.w700, color: cs.primary)))),
-      IconButton(onPressed: onNext, icon: const Icon(Icons.chevron_right)),
-    ]);
+    return Row(
+      children: [
+        if (showTodayButton) ...[
+          TextButton.icon(
+            icon: const Icon(Icons.today, size: 20),
+            label: const Text('Today'),
+            onPressed: onTodayTap,
+            style: TextButton.styleFrom(
+              foregroundColor: cs.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+            ),
+          ),
+          const Spacer(),
+        ] else
+          const SizedBox(width: 48), // Balance the row
+
+        IconButton(onPressed: onPrev, icon: const Icon(Icons.chevron_left)),
+        Expanded(
+          child: InkWell(
+            onTap: onLabelTap,
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+          ),
+        ),
+        IconButton(
+          onPressed: showNext ? onNext : null,
+          icon: Icon(Icons.chevron_right, color: showNext ? cs.onSurface : cs.onSurface.withOpacity(0.38)),
+        ),
+
+        if (showTodayButton) const Spacer(),
+        const SizedBox(width: 48), // Balance the row
+      ],
+    );
   }
 }
 

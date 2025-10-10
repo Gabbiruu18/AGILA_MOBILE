@@ -62,6 +62,7 @@ class AttendanceController extends ChangeNotifier {
 
   AttendanceController({required this.service, required this.userId, required this.role});
 
+  // --- Date Helpers ---
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   DateTime _startOfDay(DateTime d) => _dateOnly(d);
   DateTime _startOfWeek(DateTime d) => _dateOnly(d).subtract(Duration(days: d.weekday - 1));
@@ -69,14 +70,36 @@ class AttendanceController extends ChangeNotifier {
   DateTime _startOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
   DateTime _endOfMonth(DateTime d) => DateTime(d.year, d.month + 1, 0);
 
+  // --- Navigation Properties ---
+  bool get isToday => _dateOnly(state.anchor) == _dateOnly(DateTime.now());
+
+  bool get canShiftNext {
+    final now = DateTime.now();
+    switch (state.mode) {
+      case ViewMode.daily:
+      // Allow shifting to tomorrow, but not beyond.
+        return _dateOnly(state.anchor).isBefore(_dateOnly(now).add(const Duration(days: 1)));
+      case ViewMode.weekly:
+      // Do not allow shifting to a future week.
+        return !_startOfWeek(state.anchor.add(const Duration(days: 7))).isAfter(_startOfWeek(now));
+      case ViewMode.monthly:
+      // Do not allow shifting to a future month.
+        final nextMonth = _startOfMonth(state.anchor).add(const Duration(days: 32));
+        return !_startOfMonth(nextMonth).isAfter(_startOfMonth(now));
+    }
+  }
+
+  // --- Navigation Actions ---
   void setMode(ViewMode m) {
     _state = _state.copyWith(mode: m, anchor: _dateOnly(_state.anchor));
     refresh();
   }
 
   void shiftPeriod(int delta) {
-    final m = _state.mode;
-    DateTime a = _state.anchor;
+    if (delta > 0 && !canShiftNext) return;
+
+    final m = state.mode;
+    DateTime a = state.anchor;
     switch (m) {
       case ViewMode.daily:   a = a.add(Duration(days: delta)); break;
       case ViewMode.weekly:  a = a.add(Duration(days: 7 * delta)); break;
@@ -86,22 +109,34 @@ class AttendanceController extends ChangeNotifier {
     refresh();
   }
 
+  void jumpToDate(DateTime date) {
+    _state = _state.copyWith(anchor: _dateOnly(date));
+    refresh();
+  }
+
+  void jumpToToday() {
+    jumpToDate(DateTime.now());
+  }
+
+
   String periodLabel() {
     String m3(int m) => ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][m - 1];
     String monthName(int m) => ["January","February","March","April","May","June","July","August","September","October","November","December"][m - 1];
     String d2(int d) => d.toString().padLeft(2, '0');
     String wd3(DateTime d) => ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d.weekday - 1];
 
-    switch (_state.mode) {
+    switch (state.mode) {
       case ViewMode.daily:
-        final s = _startOfDay(_state.anchor);
+        final s = _startOfDay(state.anchor);
+        if (isToday) return "Today";
+        if (_dateOnly(s) == _dateOnly(DateTime.now()).add(const Duration(days: 1))) return "Tomorrow";
         return "${wd3(s)}, ${m3(s.month)} ${d2(s.day)}, ${s.year}";
       case ViewMode.weekly:
-        final s = _startOfWeek(_state.anchor);
-        final e = _endOfWeek(_state.anchor);
+        final s = _startOfWeek(state.anchor);
+        final e = _endOfWeek(state.anchor);
         return "${m3(s.month)} ${d2(s.day)} – ${m3(e.month)} ${d2(e.day)}, ${e.year}";
       case ViewMode.monthly:
-        final s = _startOfMonth(_state.anchor);
+        final s = _startOfMonth(state.anchor);
         return "${monthName(s.month)} ${s.year}";
     }
   }
@@ -111,10 +146,10 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final (DateTime start, DateTime end) = switch (_state.mode) {
-        ViewMode.daily   => (_startOfDay(_state.anchor), _startOfDay(_state.anchor)),
-        ViewMode.weekly  => (_startOfWeek(_state.anchor), _endOfWeek(_state.anchor)),
-        ViewMode.monthly => (_startOfMonth(_state.anchor), _endOfMonth(_state.anchor)),
+      final (DateTime start, DateTime end) = switch (state.mode) {
+        ViewMode.daily   => (_startOfDay(state.anchor), _startOfDay(state.anchor)),
+        ViewMode.weekly  => (_startOfWeek(state.anchor), _endOfWeek(state.anchor)),
+        ViewMode.monthly => (_startOfMonth(state.anchor), _endOfMonth(state.anchor)),
       };
 
       final sessionsByDate = await service.getSessionsForRange(
@@ -123,8 +158,8 @@ class AttendanceController extends ChangeNotifier {
 
       // ---- Daily groups (for anchor date)
       List<SubjectDayGroup> dailyGroups = const [];
-      if (_state.mode == ViewMode.daily) {
-        final d = _startOfDay(_state.anchor);
+      if (state.mode == ViewMode.daily) {
+        final d = _startOfDay(state.anchor);
         final list = sessionsByDate[d] ?? const <Session>[];
         final map = <String, List<Session>>{};
         for (final s in list) {
@@ -139,8 +174,8 @@ class AttendanceController extends ChangeNotifier {
 
       // ---- Weekly items (Mon–Fri)
       List<SubjectWeekItem> weeklyItems = const [];
-      if (_state.mode == ViewMode.weekly) {
-        final mon = _startOfWeek(_state.anchor);
+      if (state.mode == ViewMode.weekly) {
+        final mon = _startOfWeek(state.anchor);
         final byKey = <String, List<(int idx, Session s)>>{};
         for (int i = 0; i < 5; i++) { // Only Mon-Fri
           final d = mon.add(Duration(days: i));
@@ -166,7 +201,7 @@ class AttendanceController extends ChangeNotifier {
 
       // ---- Monthly totals
       List<SubjectTotals> monthlyTotals = const [];
-      if (_state.mode == ViewMode.monthly) {
+      if (state.mode == ViewMode.monthly) {
         final map = <String, int>{};
         sessionsByDate.values.expand((s) => s).forEach((s) {
           map[displayName(s)] = (map[displayName(s)] ?? 0) + 1;

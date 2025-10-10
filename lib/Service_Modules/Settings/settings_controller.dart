@@ -5,7 +5,6 @@ import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Service_Modules/Login//biometric_util.dart';
 import 'settings_service.dart';
 
-// Sound enum remains the same...
 enum NotifSound { system, chime, bell, pop }
 extension NotifSoundX on NotifSound {
   String get key => name;
@@ -19,10 +18,12 @@ class SettingsController extends ChangeNotifier {
   final AudioPlayer _player = AudioPlayer();
   bool _isBusy = false;
 
-  // Existing properties
   NotifSound selectedSound = NotifSound.system;
 
-  // --- NEW: Quick Login State ---
+  // --- ADDED: Notification Preference State ---
+  bool notificationsEnabled = true;
+
+  // Quick Login State
   bool hasPasscode = false;
   bool hasBiometrics = false;
   bool canCheckBiometrics = false;
@@ -35,17 +36,20 @@ class SettingsController extends ChangeNotifier {
     _isBusy = true;
     notifyListeners();
 
-    // Load sound settings
     final savedSound = await _svc.getNotificationSound();
     selectedSound = NotifSoundX.parse(savedSound ?? 'system');
 
-    // --- NEW: Load Quick Login Settings ---
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
       _uid = user.uid;
       final passcodeStatus = await _svc.getPasscodeStatus(_uid!);
       hasPasscode = passcodeStatus['hasPasscode'];
       _role = passcodeStatus['role'];
+
+      // --- ADDED: Load Notification Status ---
+      if (_role != null) {
+        notificationsEnabled = await _svc.getNotificationStatus(_uid!, _role!);
+      }
 
       canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
       if (canCheckBiometrics) {
@@ -57,7 +61,15 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Sound methods remain the same...
+  // --- ADDED: Notification Preference Method ---
+  Future<void> toggleNotifications(bool value) async {
+    if (_uid == null || _role == null) return;
+
+    notificationsEnabled = value;
+    notifyListeners(); // Update UI immediately for responsiveness
+    await _svc.setNotificationStatus(_uid!, _role!, enabled: value);
+  }
+
   Future<void> setSound(NotifSound s) async {
     selectedSound = s;
     await _svc.setNotificationSound(s.key);
@@ -71,12 +83,11 @@ class SettingsController extends ChangeNotifier {
     await _player.play(AssetSource(asset));
   }
 
-  // --- NEW: Quick Login Logic ---
   Future<void> toggleBiometrics(BuildContext context, {required bool value}) async {
     if (!canCheckBiometrics || _uid == null) return;
 
     bool success = false;
-    if (value) { // Turning on
+    if (value) {
       final authenticated = await BiometricUtil.authenticateWithFingerprint(context);
       if (authenticated) {
         await _svc.setBiometricStatus(_uid!, enabled: true);
@@ -84,7 +95,7 @@ class SettingsController extends ChangeNotifier {
         success = true;
         if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometrics enabled")));
       }
-    } else { // Turning off
+    } else {
       await _svc.setBiometricStatus(_uid!, enabled: false);
       hasBiometrics = false;
       success = true;
@@ -103,7 +114,6 @@ class SettingsController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Logout methods remain the same...
   Future<void> logout(BuildContext context) async {
     final ok = await _confirmLogout(context);
     if (ok != true) return;
@@ -124,7 +134,6 @@ class SettingsController extends ChangeNotifier {
   Future<bool> _confirmLogout(BuildContext ctx) async {
     final result = await showDialog<bool>(
       context: ctx,
-      barrierDismissible: false,
       builder: (dialogCtx) => AlertDialog(
         title: Row(children: const [Icon(Icons.logout, color: Color(0xFF9A0017)), SizedBox(width: 8), Text('Confirm logout')]),
         content: const Text("You'll be signed out of AGILA. Continue?"),

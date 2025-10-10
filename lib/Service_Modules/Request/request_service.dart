@@ -3,41 +3,44 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 class RequestService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
-  Query sentQuery(String role, String uid, bool newestFirst) => _db
-      .collection('users')
-      .doc(role)
-      .collection('accounts')
-      .doc(uid)
-      .collection('Request')
-      .orderBy('createdAt', descending: newestFirst);
+  /// Returns a query for all requests sent by the current user.
+  /// This queries the specific user's 'Request' subcollection.
+  Query sentQuery(String role, String uid, bool newestFirst) {
+    return _db
+        .collection('users')
+        .doc(role)
+        .collection('accounts')
+        .doc(uid)
+        .collection('Request')
+        .orderBy('createdAt', descending: newestFirst);
+  }
 
-  Query receivedQuery(String role, String uid, bool newestFirst) => _db
-      .collection('users')
-      .doc(role)
-      .collection('accounts')
-      .doc(uid)
-      .collection('received_request')
-      .orderBy('createdAt', descending: newestFirst);
+  /// Returns a query for all requests received by the current user.
+  /// This uses a collection group query to search across all 'Request' subcollections.
+  Query receivedQuery(String role, String uid, bool newestFirst) {
+    // The 'role' passed here is the role of the current user (the receiver).
+    final receiverRoleKey = role.isNotEmpty ? role[0].toUpperCase() + role.substring(1).replaceAll('_', '') : '';
 
+    // Use a collectionGroup query to find 'Request' documents across all users.
+    return _db
+        .collectionGroup('Request')
+        .where('to${receiverRoleKey}Id', isEqualTo: uid) // Find requests where the user is the recipient.
+        .orderBy('createdAt', descending: newestFirst);
+  }
+
+  /// Updates the status of a single request document.
   Future<void> updateStatus({
     required String newStatus,
     required String receiverRole,
     required String receiverUid,
-    required String receiverName, // Added to store in the decision map
+    required String receiverName,
     required String senderRole,
     required String senderUid,
     required String requestId,
     String? reason,
   }) async {
-    final receiverRef = _db
-        .collection('users')
-        .doc(receiverRole)
-        .collection('accounts')
-        .doc(receiverUid)
-        .collection('received_request')
-        .doc(requestId);
-
-    final senderRef = _db
+    // To update a document, we still need the full path to the sender's subcollection.
+    final requestRef = _db
         .collection('users')
         .doc(senderRole)
         .collection('accounts')
@@ -45,34 +48,21 @@ class RequestService {
         .collection('Request')
         .doc(requestId);
 
-    // Create the new decision map
     final decisionData = {
       'by': receiverUid,
       'byName': receiverName,
       'decidedAt': FieldValue.serverTimestamp(),
       'type': newStatus,
-      'remarks': reason ?? '', // Store remarks, even if empty
+      'remarks': reason ?? '',
     };
 
-    // Prepare the data for update. Keep top-level status for filtering.
     final updateData = {
       'status': newStatus,
+      'updatedAt': FieldValue.serverTimestamp(),
       'teacherDecision': decisionData,
     };
 
-    // Use a batch write to update both documents atomically.
-    final batch = _db.batch();
-
-    final receiverDoc = await receiverRef.get();
-    if (receiverDoc.exists) {
-      batch.update(receiverRef, updateData);
-    }
-
-    final senderDoc = await senderRef.get();
-    if (senderDoc.exists) {
-      batch.update(senderRef, updateData);
-    }
-
-    await batch.commit();
+    // The update logic remains the same, targeting that single source of truth.
+    await requestRef.update(updateData);
   }
 }

@@ -1,6 +1,7 @@
 fixed bugs and errors
 
-Haven't applied notifications
+Notifications: Request sent and recieved notification shows
+    To do: Add notification for incoming class
 
 /// All screens are DARKMODE ready, can use system theme.
 ADDED SCREENS
@@ -21,23 +22,20 @@ ADDED SCREENS
 
 
 - Profile - New UI, Contact No. applied, add and show Profile Pic both teacher
-  and students, need confirmation on logout.
+  and students, need confirmation on logout. Add Turn Off Notification,
+  Settings Button Added, passcode and fingerprint are toggle added.
+  alarm sound or custom alarm sound are in the mobile app's settings.
 
-            Settings Button Added, Darkmode switch and Logout button will be inside the Settings.
-            Quick login biometrics and passcode are available.
             passcode stores in firebase, it can be use in other mobiles.
             fingerprint store in local meaning only on the device.
-            
-            Need to: Add Turn Off Notification, add alarm sound or custom alarm sound.
-
 
 No more Face Registration and Face Recognition screen
-
 
 Main screens
 Fix bugs: Black screen when opening the app again even it runs on the background.
 - Login - integrate AGILA LOgo
 - Quick Login - The app will ask the user to if they want to register a passcode or fingerprint.
-  passcode stores in firebase, even the user doesnt click remember me the app will still ask for a passcode but they can skip it.
+  passcode stores in firebase, even the user doesn't click remember me the app will still ask for a passcode but they can skip it.
   biometrics stores in local sharedReference, it will be shown if the user click remember me.
 - Opening - Logo Integrate
+

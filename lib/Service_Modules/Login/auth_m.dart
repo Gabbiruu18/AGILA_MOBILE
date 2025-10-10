@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart'; // <-- ADD THIS IMPORT
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,36 @@ import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
 import 'package:project_agila/Service_Modules/Login//biometric_util.dart';
 
 class AuthServices {
+  // This function gets the device's token and saves it to Firestore.
+  static Future<void> _getAndSaveFCMToken(String role, String uid) async {
+    try {
+      final FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
+      await firebaseMessaging.requestPermission();
+      final String? token = await firebaseMessaging.getToken();
+
+      if (token != null) {
+        debugPrint('FCM Token: $token');
+
+        // --- THIS IS THE CORRECTED PATH LOGIC ---
+        // It builds the path exactly as the backend expects it.
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(role) // Uses the role ('student', 'teacher', etc.)
+            .collection('accounts')
+            .doc(uid)  // Uses the user's unique ID
+            .update({
+          'fcmToken': token,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        // --- END OF CORRECTION ---
+
+        debugPrint('FCM token saved to Firestore at: users/$role/accounts/$uid');
+      }
+    } catch (e) {
+      debugPrint('Error getting or saving FCM token: $e');
+    }
+  }
+
   static Future<void> login(String email, String password, bool rememberMe, BuildContext context) async {
     try {
       UserCredential userCredential = await FirebaseAuth.instance.signInWithEmailAndPassword(email: email, password: password);
@@ -31,24 +62,18 @@ class AuthServices {
 
       if (userData == null || role == null) throw Exception("User data or role not found in Firestore.");
 
+      // --- THIS IS THE ADDED LINE ---
+      // After we confirm the user exists and we have their role, save the token.
+      await _getAndSaveFCMToken(role, uid);
+
       final prefs = await SharedPreferences.getInstance();
 
-      // --- THE FIX: Await the dialog to ensure it's seen before navigating ---
       bool faceRegistered = userData['faceRegistered'] ?? false;
       bool hasBeenNotified = prefs.getBool('face_reg_notified_for_uid_$uid') ?? false;
 
       if (!faceRegistered && !hasBeenNotified) {
-        String authority = "your designated authority";
-        switch (role) {
-          case 'student':
-          case 'teacher':
-          case 'program_head':
-            authority = "MIS";
-            break;
-        }
-
+        String authority = "MIS";
         if (context.mounted) {
-          // By 'awaiting' this, we ensure the code pauses until the user clicks OK.
           await showDialog(
             context: context,
             builder: (dialogContext) => AlertDialog(
@@ -62,12 +87,10 @@ class AuthServices {
               ],
             ),
           );
-          // After the user clicks OK and the dialog closes, save the flag.
           await prefs.setBool('face_reg_notified_for_uid_$uid', true);
         }
       }
 
-      // --- Continue with login regardless of face registration status ---
       if (rememberMe) {
         await prefs.setBool('rememberMe', true);
         await prefs.setString('rememberedEmail', email);
@@ -84,7 +107,6 @@ class AuthServices {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Welcome, ${user.email}! Login Successful")));
       if (!context.mounted) return;
 
-      // Quick login setup prompts...
       final hasPasscode = userData.containsKey('passcode') && (userData['passcode'] as String? ?? '').isNotEmpty;
       final passcodeSetupSkipped = prefs.getBool('passcode_setup_skipped_for_uid_$uid') ?? false;
 
@@ -114,8 +136,9 @@ class AuthServices {
 
     } on FirebaseAuthException catch (e) {
       String message = "Login Failed: An unknown error occurred.";
-      if (e.code == 'user-not-found' || e.code == 'invalid-email') message = "Login Failed: No user found with that email.";
-      else if (e.code == 'wrong-password' || e.code == 'invalid-credential') message = "Login Failed: Incorrect password.";
+      if (e.code == 'user-not-found' || e.code == 'invalid-email') {
+        message = "Login Failed: No user found with that email.";
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') message = "Login Failed: Incorrect password.";
       else if (e.code == 'network-request-failed') message = "Login Failed: Please check your network connection.";
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
@@ -123,7 +146,6 @@ class AuthServices {
     }
   }
 
-  // _promptPinSetup and _showRegisterFingerprintDialog methods remain the same...
   static Future<void> _promptPinSetup(BuildContext context, String uid, String role) async {
     final pinController = TextEditingController();
     final cs = Theme.of(context).colorScheme;

@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Service_Modules/Attendance/attendance_controller.dart';
 import 'package:project_agila/Service_Modules/Attendance/attendance_UI.dart';
 import 'package:project_agila/Service_Modules/Attendance/attendance_service.dart';
@@ -48,6 +47,20 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
   }
 
+  Future<void> _showDatePicker() async {
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: ctrl.state.anchor,
+      firstDate: DateTime(2020),
+      // Allow selecting up to tomorrow
+      lastDate: DateTime.now().add(const Duration(days: 1)),
+    );
+
+    if (selectedDate != null) {
+      ctrl.jumpToDate(selectedDate);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,10 +107,15 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                PeriodSwitcher(
+                EnhancedPeriodSwitcher(
                   label: ctrl.periodLabel(),
                   onPrev: () => ctrl.shiftPeriod(-1),
                   onNext: () => ctrl.shiftPeriod(1),
+                  showNext: ctrl.canShiftNext,
+                  // Only show date picker for daily view
+                  onLabelTap: ctrl.state.mode == ViewMode.daily ? _showDatePicker : () {},
+                  showTodayButton: ctrl.state.mode == ViewMode.daily && !ctrl.isToday,
+                  onTodayTap: ctrl.jumpToToday,
                 ),
                 if (ctrl.state.loading) const LinearProgressIndicator(minHeight: 2),
                 if (ctrl.state.error != null)

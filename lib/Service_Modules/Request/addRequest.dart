@@ -21,7 +21,7 @@ class AddRequestModal extends StatefulWidget {
     super.key,
     required this.uid,
     required this.role,
-    required this.name, 
+    required this.name,
     required this.academicYearId,
     required this.acadYear,
     required this.semesterId,
@@ -339,6 +339,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
         'attachments': attachmentsData,
         'role': widget.role,
         'recipientRole': recipientRole,
+        'teacherDecision': {}, // Initialize with an empty map for consistency
       };
 
       final batch = FirebaseFirestore.instance.batch();
