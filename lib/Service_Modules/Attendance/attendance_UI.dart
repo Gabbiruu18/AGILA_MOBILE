@@ -224,7 +224,6 @@ class WeeklyList extends StatelessWidget {
   const WeeklyList({super.key, required this.items});
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
     if (items.isEmpty) {
       return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this week.")));
     }
