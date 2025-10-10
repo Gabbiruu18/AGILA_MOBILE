@@ -1,9 +1,9 @@
 fixed bugs and errors
 
-Notifications: Request sent and recieved notification shows
+Notifications: Request sent and received notification shows
     To do: Add notification for incoming class
 
-/// All screens are DARKMODE ready, can use system theme.
+/// All screens are DARK MODE ready, can use system theme.
 ADDED SCREENS
 - HOME - Date and notes added, Student and Teachers Today's Schedule are showing, but adjust and tweaks on the UI.
   Now the schedule fetching for student is not working, cuz still waiting for the data scheme of Irregular, retake, late enrollee, and etc.
