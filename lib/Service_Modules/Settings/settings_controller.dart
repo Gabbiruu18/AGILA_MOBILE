@@ -26,35 +26,32 @@ class SettingsController extends ChangeNotifier {
   // Quick Login State
   bool hasPasscode = false;
   bool hasBiometrics = false;
+
   bool canCheckBiometrics = false;
   String? _uid;
   String? _role;
 
   SettingsController({SettingsService? service}) : _svc = service ?? SettingsService();
 
-  Future<void> load() async {
+  // ✅ CHANGED: accept uid and role
+  Future<void> load({required String uid, required String role}) async {
     _isBusy = true;
     notifyListeners();
+
+    _uid = uid;
+    _role = role;
 
     final savedSound = await _svc.getNotificationSound();
     selectedSound = NotifSoundX.parse(savedSound ?? 'system');
 
-    final user = FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      _uid = user.uid;
-      final passcodeStatus = await _svc.getPasscodeStatus(_uid!);
-      hasPasscode = passcodeStatus['hasPasscode'];
-      _role = passcodeStatus['role'];
+    final passcodeStatus = await _svc.getPasscodeStatus(_uid!);
+    hasPasscode = passcodeStatus['hasPasscode'];
 
-      // --- ADDED: Load Notification Status ---
-      if (_role != null) {
-        notificationsEnabled = await _svc.getNotificationStatus(_uid!, _role!);
-      }
+    notificationsEnabled = await _svc.getNotificationStatus(_uid!, _role!);
 
-      canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
-      if (canCheckBiometrics) {
-        hasBiometrics = await _svc.getBiometricStatus(_uid!);
-      }
+    canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
+    if (canCheckBiometrics) {
+      hasBiometrics = await _svc.getBiometricStatus(_uid!);
     }
 
     _isBusy = false;

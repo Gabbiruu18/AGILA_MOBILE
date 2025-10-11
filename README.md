@@ -1,16 +1,20 @@
 fixed bugs and errors
 
 Notifications: Request sent and received notification shows
-    To do: Add notification for incoming class
+    To do: Add notification for incoming class and attendance status.
 
 /// All screens are DARK MODE ready, can use system theme.
 ADDED SCREENS
 - HOME - Date and notes added, Student and Teachers Today's Schedule are showing, but adjust and tweaks on the UI.
   Now the schedule fetching for student is not working, cuz still waiting for the data scheme of Irregular, retake, late enrollee, and etc.
 
-- ATTENDANCE(Student) Home module student schedule fetching applied.
+- ATTENDANCE(Student) Schedules fetching.
+  TO DO: Apply Attendance fetching.
+  
 
-- SCHEDULE(teacher) it is now showing all data, but a few more UI Tweaks and some Data logic fetching need some fixes. and waiting if the teahcers need to see their attendance too.
+- SCHEDULE(teacher) it is now showing all data, but a few more UI Tweaks and some 
+  Data logic fetching need some fixes. and waiting if the teachers need to see their attendance too.
+  TO DO: Use Attendance Card UI.
 
 
 - Request - (Students)Can request to all available teachers, Not subject teachers only.

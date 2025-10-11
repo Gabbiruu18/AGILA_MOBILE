@@ -27,6 +27,7 @@ class ProfileController extends ChangeNotifier {
   bool _isBusy = false;            // e.g. uploading image, saving contact
   bool _hasPendingWrites = false;  // from snapshot.metadata.hasPendingWrites
   bool get isSyncing => isLoading || _isBusy || _hasPendingWrites;
+  bool get isBusy => _isBusy; // ✅ NEW: expose busy state for UI
 
   // ----- Derived helpers -----
   String get courseAcronym => _toAcronym((userData?['courseName'] ?? '').toString());

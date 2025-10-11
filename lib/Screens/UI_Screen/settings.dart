@@ -3,7 +3,8 @@ import 'package:project_agila/Screens/Theme/theme_scope.dart';
 import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Service_Modules/Settings/settings_controller.dart';
 
-Future<bool?> showSettingsSheet(BuildContext context) {
+// ✅ CHANGED: accept role and uid
+Future<bool?> showSettingsSheet(BuildContext context, {required String role, required String uid}) {
   return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
@@ -12,12 +13,15 @@ Future<bool?> showSettingsSheet(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => const _SettingsSheet(),
+    builder: (_) => _SettingsSheet(role: role, uid: uid), // ✅ CHANGED: pass to widget
   );
 }
 
 class _SettingsSheet extends StatefulWidget {
-  const _SettingsSheet();
+  // ✅ CHANGED: accept role and uid
+  final String role;
+  final String uid;
+  const _SettingsSheet({required this.role, required this.uid});
 
   @override
   State<_SettingsSheet> createState() => _SettingsSheetState();
@@ -30,7 +34,8 @@ class _SettingsSheetState extends State<_SettingsSheet> {
   @override
   void initState() {
     super.initState();
-    _settingsCtrl = SettingsController()..load();
+    // ✅ CHANGED: pass role and uid to controller
+    _settingsCtrl = SettingsController()..load(uid: widget.uid, role: widget.role);
   }
 
   @override

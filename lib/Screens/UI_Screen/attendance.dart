@@ -40,9 +40,14 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       showDragHandle: true,
       isScrollControlled: true,
       builder: (_) => SessionDetailsPanel(
-        session: session,
-        fetchStudents: () => ctrl.viewSectionRoster(session.section),
-        fetchInstructor: () => ctrl.viewInstructorDetails(session.instructorId!),
+          session: session,
+          fetchStudents: () => ctrl.viewSectionRoster(session.section, session.id),
+          fetchInstructor: () {
+            if (session.instructorId == null || session.instructorId!.isEmpty) {
+              return Future.value(null);
+            }
+            return ctrl.viewInstructorDetails(session.instructorId!);
+          }
       ),
     );
   }
@@ -52,7 +57,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
       context: context,
       initialDate: ctrl.state.anchor,
       firstDate: DateTime(2020),
-      // Allow selecting up to tomorrow
       lastDate: DateTime.now().add(const Duration(days: 1)),
     );
 
@@ -112,7 +116,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   onPrev: () => ctrl.shiftPeriod(-1),
                   onNext: () => ctrl.shiftPeriod(1),
                   showNext: ctrl.canShiftNext,
-                  // Only show date picker for daily view
                   onLabelTap: ctrl.state.mode == ViewMode.daily ? _showDatePicker : () {},
                   showTodayButton: ctrl.state.mode == ViewMode.daily && !ctrl.isToday,
                   onTodayTap: ctrl.jumpToToday,

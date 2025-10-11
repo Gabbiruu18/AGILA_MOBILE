@@ -1,7 +1,21 @@
 import 'package:flutter/material.dart';
 import 'attendance_service.dart';
+import 'attendance_controller.dart';
 
-// ---- UI helpers ----
+// ============================ HELPERS (Copied for Independence) ============================
+
+String _d2(int n) => n.toString().padLeft(2, '0');
+String fmtTime(int minutes) {
+  if (minutes < 0) return "N/A";
+  final tod = TimeOfDay(hour: minutes ~/ 60, minute: minutes % 60);
+  final h = tod.hourOfPeriod == 0 ? 12 : tod.hourOfPeriod;
+  final m = _d2(tod.minute);
+  final ap = tod.period == DayPeriod.am ? "AM" : "PM";
+  return "$h:$m $ap";
+}
+String fmtRange(int startMinutes, int endMinutes) => "${fmtTime(startMinutes)}–${fmtTime(endMinutes)}";
+
+
 BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
   final cs = Theme.of(context).colorScheme;
   return BoxDecoration(
@@ -10,14 +24,6 @@ BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
     boxShadow: [BoxShadow(blurRadius: 10, offset: const Offset(0, 4), color: cs.onSurface.withOpacity(0.06))],
   );
 }
-
-String fmt(TimeOfDay t) {
-  final h = t.hourOfPeriod == 0 ? 12 : t.hourOfPeriod;
-  final m = t.minute.toString().padLeft(2, '0');
-  final ap = t.period == DayPeriod.am ? "AM" : "PM";
-  return "$h:$m $ap";
-}
-String fmtRange(TimeOfDay a, TimeOfDay b) => "${fmt(a)}–${fmt(b)}";
 
 Color statusBg(SessStatus? st) {
   if (st == null) return Colors.grey.shade200;
@@ -40,7 +46,8 @@ Color statusFg(SessStatus? st) {
   }
 }
 
-// ✅ NEW: EnhancedPeriodSwitcher with Date Picker and Today button
+// ============================ UI WIDGETS ============================
+
 class EnhancedPeriodSwitcher extends StatelessWidget {
   final String label;
   final VoidCallback onPrev;
@@ -110,7 +117,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   }
 }
 
-// ----- Stat Card -----
 class StatCard extends StatelessWidget {
   final String label;
   final int value;
@@ -156,7 +162,6 @@ class StatCard extends StatelessWidget {
 }
 
 
-// ----- Section Title with lines -----
 class LinedTitle extends StatelessWidget {
   final String text;
   const LinedTitle(this.text, {super.key});
@@ -179,7 +184,6 @@ class ThinLine extends StatelessWidget {
   Widget build(BuildContext context) => Container(height: 1.2, color: Theme.of(context).colorScheme.outlineVariant);
 }
 
-// ===== Daily list (NEW - Interactive Cards) =====
 class DailyListScheduleLike extends StatelessWidget {
   final List<SubjectDayGroup> groups;
   final void Function(Session session) onViewDetails;
@@ -188,7 +192,7 @@ class DailyListScheduleLike extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final items = groups.expand((g) => g.sessions.map((s) => (g, s))).toList();
+    final items = groups.expand((g) => g.sessions).toList();
 
     if (items.isEmpty) {
       return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No classes scheduled for this day.")));
@@ -200,17 +204,16 @@ class DailyListScheduleLike extends StatelessWidget {
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (ctx, i) {
-        final group = items[i].$1;
-        final session = items[i].$2;
+        final session = items[i];
         return TodayScheduleCard(
-          subject: displayName(session),
+          subject: session.subject,
           section: session.section,
           room: session.room,
-          timeLabel: fmtRange(session.start, session.end),
+          timeLabel: fmtRange(session.startMinutes, session.endMinutes),
           statusLabel: 'Scheduled',
           statusBg: statusBg(SessStatus.scheduled),
           statusFg: statusFg(SessStatus.scheduled),
-          accentColor: _subjectAccent(displayName(session)),
+          accentColor: _subjectAccent(session.subject),
           onViewDetails: () => onViewDetails(session),
         );
       },
@@ -218,7 +221,6 @@ class DailyListScheduleLike extends StatelessWidget {
   }
 }
 
-// ===== Weekly list =====
 class WeeklyList extends StatelessWidget {
   final List<SubjectWeekItem> items;
   const WeeklyList({super.key, required this.items});
@@ -255,7 +257,6 @@ class WeeklyList extends StatelessWidget {
   }
 }
 
-// ===== Monthly list =====
 class MonthlyList extends StatelessWidget {
   final List<SubjectTotals> items;
   const MonthlyList({super.key, required this.items});
@@ -288,7 +289,6 @@ class MonthlyList extends StatelessWidget {
   }
 }
 
-// ===== Today's Schedule Card (from schedule_UI) =====
 Color _subjectAccent(String subject) {
   const palette = <Color>[Color(0xFF6CA9FF), Color(0xFFFFC66C), Color(0xFF9BE7B1), Color(0xFFB39DDB), Color(0xFFFFAB91), Color(0xFF80CBC4)];
   return palette[subject.hashCode % palette.length];
@@ -351,8 +351,9 @@ class TodayScheduleCard extends StatelessWidget {
   }
 }
 
-// ===== Session Details Panel (from schedule_UI) =====
-class SessionDetailsPanel extends StatefulWidget {
+// ============================ PANEL UI WIDGETS (Standard Version) ============================
+
+class SessionDetailsPanel extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
@@ -360,51 +361,112 @@ class SessionDetailsPanel extends StatefulWidget {
   const SessionDetailsPanel({super.key, required this.session, required this.fetchStudents, required this.fetchInstructor});
 
   @override
-  State<SessionDetailsPanel> createState() => _SessionDetailsPanelState();
+  Widget build(BuildContext context) {
+    return SlidingPanel(
+        title: session.subject,
+        child: _SessionDetailsContent(
+          session: session,
+          fetchStudents: fetchStudents,
+          fetchInstructor: fetchInstructor,
+        )
+    );
+  }
 }
 
-class _SessionDetailsPanelState extends State<SessionDetailsPanel> {
+
+class _SessionDetailsContent extends StatelessWidget {
+  final Session session;
+  final Future<List<SectionStudent>> Function() fetchStudents;
+  final Future<InstructorDetails?> Function() fetchInstructor;
+
+  const _SessionDetailsContent({required this.session, required this.fetchStudents, required this.fetchInstructor});
+
   @override
   Widget build(BuildContext context) {
-    final s = widget.session;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(session.section, style: Theme.of(context).textTheme.titleSmall),
+        const Divider(height: 24),
+        _kv(context, Icons.schedule, 'Time', fmtRange(session.startMinutes, session.endMinutes)),
+        _kv(context, Icons.meeting_room_outlined, 'Room', session.room),
+        if (session.instructorName != null) _kv(context, Icons.person_outline, 'Instructor', session.instructorName!),
+        const Divider(height: 24),
+        DefaultTabController(
+          length: 2,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const TabBar(tabs: [Tab(text: "Instructor"), Tab(text: "Classmates")]),
+              const SizedBox(height: 16),
+              SizedBox(
+                height: 300,
+                child: TabBarView(children: [
+                  FutureBuilder<InstructorDetails?>(
+                    future: fetchInstructor(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) return const LoadingContent();
+                      if (snapshot.hasError || snapshot.data == null) return const ErrorContent(error: "Instructor details not found.");
+                      return _InstructorDetailsContent(details: snapshot.data!);
+                    },
+                  ),
+                  FutureBuilder<List<SectionStudent>>(
+                    future: fetchStudents(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) return const LoadingContent();
+                      if (snapshot.hasError || snapshot.data == null || snapshot.data!.isEmpty) return const ErrorContent(error: "No classmates found.");
+                      return _SectionRosterContent(students: snapshot.data!);
+                    },
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class SlidingPanel extends StatelessWidget {
+  final String title;
+  final Widget child;
+  const SlidingPanel({super.key, required this.title, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(displayName(s), style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          Text(s.section, style: Theme.of(context).textTheme.titleSmall),
-          const Divider(height: 24),
-          _kv(context, Icons.schedule, 'Time', fmtRange(s.start, s.end)),
-          _kv(context, Icons.meeting_room_outlined, 'Room', s.room),
-          _kv(context, Icons.person_outline, 'Instructor', s.instructorName),
-          const Divider(height: 24),
-          DefaultTabController(
-            length: 2,
-            child: Column(
-              children: [
-                const TabBar(tabs: [Tab(text: "Instructor"), Tab(text: "Classmates")]),
-                const SizedBox(height: 16),
-                SizedBox(
-                  height: 300, // Constrain height
-                  child: TabBarView(children: [
-                    _buildFutureContent<InstructorDetails?>(
-                      future: widget.fetchInstructor(),
-                      builder: (details) => details == null
-                          ? const Center(child: Text("Instructor details not found."))
-                          : _InstructorDetailsContent(details: details),
-                    ),
-                    _buildFutureContent<List<SectionStudent>>(
-                      future: widget.fetchStudents(),
-                      builder: (students) => students == null || students.isEmpty
-                          ? const Center(child: Text("No classmates found."))
-                          : _SectionRosterContent(students: students),
-                    ),
-                  ]),
-                ),
-              ],
+          Center(
+            child: Container(
+              width: 40,
+              height: 5,
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Text(
+              title,
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          Flexible(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: child,
             ),
           ),
         ],
@@ -413,19 +475,17 @@ class _SessionDetailsPanelState extends State<SessionDetailsPanel> {
   }
 }
 
-Widget _buildFutureContent<T>({required Future<T> future, required Widget Function(T? data) builder}) {
-  return FutureBuilder<T>(
-    future: future,
-    builder: (context, snapshot) {
-      if (snapshot.connectionState == ConnectionState.waiting) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (snapshot.hasError) {
-        return Center(child: Text("Error: ${snapshot.error}"));
-      }
-      return builder(snapshot.data);
-    },
-  );
+class LoadingContent extends StatelessWidget {
+  const LoadingContent({super.key});
+  @override
+  Widget build(BuildContext context) => const Center(child: Padding(padding: EdgeInsets.all(32.0), child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('Fetching details...')])));
+}
+
+class ErrorContent extends StatelessWidget {
+  final String error;
+  const ErrorContent({super.key, required this.error});
+  @override
+  Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(32.0), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.error_outline, color: Colors.red, size: 40), const SizedBox(height: 16), Text('Failed to load details.\n$error', textAlign: TextAlign.center)])));
 }
 
 class _InstructorDetailsContent extends StatelessWidget {
