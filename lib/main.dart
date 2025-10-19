@@ -6,21 +6,13 @@ import 'package:project_agila/Screens/MainScreens/opening.dart';
 import 'package:project_agila/Screens/MainScreens/login.dart';
 import 'package:project_agila/Screens/MainScreens/quick_login.dart';
 import 'package:project_agila/Screens/UI_Screen/home.dart';
-
 import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Screens/Theme/theme_scope.dart';
-
-// --- ADDED: Import the necessary notification packages ---
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-// ---------------------------------------------------------
-
-// --- ADDED: Create an instance of the local notifications plugin ---
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-// -----------------------------------------------------------------
 
-// --- ADDED: This function sets up everything for foreground notifications ---
 Future<void> setupForegroundNotifications() async {
   // 1. Create a Notification Channel for Android (required for Android 8.0+)
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
@@ -60,15 +52,12 @@ Future<void> setupForegroundNotifications() async {
   });
 }
 // -------------------------------------------------------------------------
-
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-
   // --- ADDED: Call the setup function when the app starts ---
   await setupForegroundNotifications();
   // -------------------------------------------------------
-
   // --- 2. SECURITY NOTE FOR PRODUCTION ---
   await FirebaseAppCheck.instance.activate(
     webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'),
@@ -77,7 +66,6 @@ Future<void> main() async {
   );
 
   await requestPermissions();
-
   final themeCtrl = ThemeController();
   await themeCtrl.load();
 

@@ -63,7 +63,6 @@ class HomeController extends ChangeNotifier {
 
       final docRole = user['role']?.toString();
       if (docRole != null && docRole != role) {
-        debugPrint("WARNING: Role mismatch! Passed role: '$role', Firestore role: '$docRole'");
       }
 
       course     = _toAcronym(courseRaw ?? '', maxLetters: 4);
@@ -77,8 +76,7 @@ class HomeController extends ChangeNotifier {
       });
 
       initTodaySchedulesRealtime();
-    } catch (e, s) {
-      debugPrint("[HomeController] CRITICAL ERROR during init: $e\n$s");
+    } catch (e) {
       this.name = 'Error Loading Name';
     } finally {
       isLoading = false;
@@ -106,7 +104,6 @@ class HomeController extends ChangeNotifier {
       }
       if (hasListeners) notifyListeners();
     }, onError: (e, s) {
-      debugPrint("[HomeController] CRITICAL ERROR during schedule streaming: $e\n$s");
       schedulesError = e.toString();
       todaySchedules = const [];
       isLoadingSchedules = false;

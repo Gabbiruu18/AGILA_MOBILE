@@ -19,6 +19,7 @@
         android:label="AGILA"
         android:icon="@mipmap/logo_agila"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity

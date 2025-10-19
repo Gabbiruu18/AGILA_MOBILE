@@ -1,33 +1,81 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
 
 // ============================ DATA MODELS ============================
 
+enum AttendanceStatus { scheduled, present, late, absent, excused }
+
 class Session {
   final String id;
   final String subject;
   final String section;
   final String room;
+  final String roomType;
   final int weekday;
   final int startMinutes;
   final int endMinutes;
   final int colorHex;
   final String instructorId;
   final String? instructorName;
+  final AttendanceStatus status;
+
+  // New fields for detailed attendance data
+  final DateTime? firstSeen;
+  final DateTime? lastSeen;
+  final String? source; // "Manual" or "CCTV"
+  final String? academicStatus;
+  final String? studentId; // UID of the user
+  final DateTime? updatedAt;
+  final String? studentNo;
 
   const Session({
     required this.id,
     required this.subject,
     required this.section,
     required this.room,
+    required this.roomType,
     required this.weekday,
     required this.startMinutes,
     required this.endMinutes,
     required this.colorHex,
     required this.instructorId,
     this.instructorName,
+    this.status = AttendanceStatus.scheduled,
+    this.firstSeen,
+    this.lastSeen,
+    this.source,
+    this.academicStatus,
+    this.studentId,
+    this.updatedAt,
+    this.studentNo,
   });
+
+  Session withStatus(AttendanceStatus newStatus) {
+    return Session(
+      id: id,
+      subject: subject,
+      section: section,
+      room: room,
+      roomType: roomType,
+      weekday: weekday,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      colorHex: colorHex,
+      instructorId: instructorId,
+      instructorName: instructorName,
+      status: newStatus,
+      firstSeen: firstSeen,
+      lastSeen: lastSeen,
+      source: source,
+      academicStatus: academicStatus,
+      studentId: studentId,
+      updatedAt: updatedAt,
+      studentNo: studentNo,
+    );
+  }
 }
 
 class SectionStudent {
@@ -44,10 +92,24 @@ class InstructorDetails {
   InstructorDetails({required this.name, this.departmentName, this.photoURL});
 }
 
+class ActiveTerm {
+  final String academicYearId;
+  final String semesterId;
+  final DateTime startDate;
+  final DateTime endDate;
+  ActiveTerm({
+    required this.academicYearId,
+    required this.semesterId,
+    required this.startDate,
+    required this.endDate,
+  });
+}
+
+
 // ============================ SERVICE INTERFACE ============================
 
 abstract class AttendanceService {
-  Future<Map<DateTime, List<Session>>> getSessionsForRange({
+  Future<(Map<DateTime, List<Session>>, ActiveTerm?)> getSessionsForRange({
     required String userId,
     required String role,
     required DateTime start,
@@ -62,217 +124,549 @@ abstract class AttendanceService {
   Future<InstructorDetails?> fetchInstructorDetails({
     required String instructorId
   });
+
+  // New method to get attendance records by status
+  Future<List<Session>> getSessionsByStatus({
+    required String userId,
+    required String role,
+    required AttendanceStatus status,
+    required DateTime date,
+  });
 }
 
 // ============================ FIRESTORE IMPLEMENTATION ============================
 
 class FirestoreAttendanceService implements AttendanceService {
   final FirebaseFirestore _db;
+  // Add simple caching to improve performance
+  final Map<String, ActiveTerm> _termCache = {};
+
   FirestoreAttendanceService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
 
   // --- Main Data Fetching ---
-
   @override
-  Future<Map<DateTime, List<Session>>> getSessionsForRange({
+  Future<(Map<DateTime, List<Session>>, ActiveTerm?)> getSessionsForRange({
     required String userId,
     required String role,
     required DateTime start,
     required DateTime end,
   }) async {
-    final academicIds = await _findActiveAcademicIds();
-    if (academicIds == null) {
+    final activeTerm = await _findActiveTerm();
+    if (activeTerm == null) {
       throw Exception('No active academic term is set. Please contact an administrator.');
     }
 
-    final isTeacher = role == 'teacher' || role == 'program_head';
+    // Use the collection group query approach for fetching schedules
+    List<Session> allSessions = await _fetchStudentSchedulesWithCollectionGroup(
+        uid: userId,
+        activeTerm: activeTerm
+    );
 
-    List<Session> allSessions;
-    if (isTeacher) {
-      allSessions = await _fetchTeacherSchedules(uid: userId, academicIds: academicIds);
-    } else {
-      allSessions = await _fetchStudentSchedules(uid: userId, role: role, academicIds: academicIds);
-    }
+    // Fetch attendance data for these sessions
+    allSessions = await _enrichSessionsWithAttendanceData(allSessions, userId, start, end);
 
     final results = <DateTime, List<Session>>{};
     final sessionsByWeekday = <int, List<Session>>{};
     for (final session in allSessions) {
       sessionsByWeekday.putIfAbsent(session.weekday, () => []).add(session);
     }
-
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
       final sessionsForDay = sessionsByWeekday[d.weekday] ?? [];
       sessionsForDay.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
       results[d] = sessionsForDay;
     }
-    return results;
+    return (results, activeTerm);
   }
-
-  // --- Teacher Schedule Logic ---
-  Future<List<Session>> _fetchTeacherSchedules({required String uid, required Map<String, String> academicIds}) async {
-    final query = _db.collectionGroup('schedules').where('instructorId', isEqualTo: uid);
-    final snap = await query.get();
-    final activeSchedules = snap.docs.where((doc) {
-      final path = doc.reference.path;
-      return path.contains(academicIds['academicYearId']!) && path.contains(academicIds['semesterId']!);
-    }).toList();
-
-    final itemsWithData = await Future.wait(activeSchedules.map((doc) async {
-      String? sectionName;
-      final sectionDocRef = doc.reference.parent.parent;
-      if (sectionDocRef != null) {
-        final sectionDoc = await sectionDocRef.get();
-        sectionName = _strOrNull(sectionDoc.data()?['sectionName']);
+  Future<List<Session>> _enrichSessionsWithAttendanceData(
+      List<Session> sessions,
+      String userId,
+      DateTime start,
+      DateTime end
+      ) async {
+    try {
+      // Format dates for query
+      final List<String> dateStrings = [];
+      for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+        dateStrings.add(_formatDateStr(d));
       }
-      return _mapDocToSessions(doc, sectionName: sectionName);
-    }));
 
-    return itemsWithData.expand((sessions) => sessions).toList();
-  }
+      debugPrint('[ATTENDANCE DEBUG] ======================================');
+      debugPrint('[ATTENDANCE DEBUG] CURRENT USER: $userId');
+      debugPrint('[ATTENDANCE DEBUG] Current date: ${_formatDateStr(DateTime.now())}');
+      debugPrint('[ATTENDANCE DEBUG] Fetching attendance for dates: $dateStrings');
+      debugPrint('[ATTENDANCE DEBUG] Total sessions to check: ${sessions.length}');
 
-  // --- Student Schedule Logic ---
-  Future<List<Session>> _fetchStudentSchedules({required String uid, required String role, required Map<String, String> academicIds}) async {
-    final userDetails = await _fetchUserDetails(role: role, uid: uid);
-    if (userDetails == null) throw Exception('Could not find your user details.');
+      // Map to store fetched attendance sessions by scheduleId for quick lookup
+      final attendanceBySubjectId = <String, List<DocumentSnapshot<Map<String, dynamic>>>>{};
+      int totalAttendanceRecords = 0;
 
-    final academicStatus = _strOrNull(userDetails['academicStatus']) ?? 'regular';
+      // Query attendance sessions for each date in range
+      for (final dateStr in dateStrings) {
+        try {
+          debugPrint('[ATTENDANCE DEBUG] Querying collection "attendance_sessions" with dateStr = $dateStr');
 
-    if (academicStatus == 'regular') {
-      return _fetchRegularStudentSchedule(userDetails: userDetails, academicIds: academicIds);
-    } else {
-      return _fetchIrregularStudentSchedule(uid: uid, academicIds: academicIds);
+          final snapshot = await _db
+              .collection('attendance_sessions')
+              .where('dateStr', isEqualTo: dateStr)
+              .get();
+
+          debugPrint('[ATTENDANCE DEBUG] Found ${snapshot.docs.length} attendance sessions for date $dateStr');
+          totalAttendanceRecords += snapshot.docs.length;
+
+          // Check each session for this user's attendance
+          for (final doc in snapshot.docs) {
+            final data = doc.data();
+            final subjectName = _strOrNull(data['subjectName']) ?? 'Unknown Subject';
+            final scheduleId = _strOrNull(data['scheduleId']);
+
+
+            debugPrint('[USER CHECK] Checking for user $userId in session: $subjectName');
+
+            try {
+              final userAttendanceRef = doc.reference.collection('students').doc(userId);
+              final userAttendanceDoc = await userAttendanceRef.get();
+
+              if (userAttendanceDoc.exists) {
+                final userData = userAttendanceDoc.data();
+                debugPrint('[USER CHECK] ✅ FOUND ATTENDANCE RECORD!');
+                debugPrint('[USER CHECK] Path: ${userAttendanceRef.path}');
+                debugPrint('[USER CHECK] Status: ${userData?['status'] ?? 'N/A'}');
+                debugPrint('[USER CHECK] Source: ${userData?['source'] ?? 'N/A'}');
+
+                if (userData?['firstSeen'] != null) {
+                  final firstSeen = (userData!['firstSeen'] as Timestamp).toDate();
+                  debugPrint('[USER CHECK] First seen: $firstSeen');
+                }
+
+                if (userData?['lastSeen'] != null) {
+                  final lastSeen = (userData!['lastSeen'] as Timestamp).toDate();
+                  debugPrint('[USER CHECK] Last seen: $lastSeen');
+                }
+              } else {
+                debugPrint('[USER CHECK] ❌ No attendance record found for this session');
+              }
+            } catch (e) {
+              debugPrint('[USER CHECK] Error checking attendance: $e');
+            }
+
+            if (scheduleId != null) {
+              attendanceBySubjectId.putIfAbsent(scheduleId, () => []).add(doc);
+              debugPrint('[ATTENDANCE DEBUG] Added attendance session: $subjectName (ID: $scheduleId)');
+            } else {
+              debugPrint('[ATTENDANCE DEBUG] Skipping attendance session without scheduleId: ${doc.id}');
+            }
+          }
+        } catch (e) {
+          debugPrint('[ATTENDANCE DEBUG] Error fetching attendance for date $dateStr: $e');
+        }
+      }
+
+      // Debug output of found sessions
+      debugPrint('[ATTENDANCE DEBUG] Found $totalAttendanceRecords total attendance records');
+      debugPrint('[ATTENDANCE DEBUG] Attendance data found for subjects: ${attendanceBySubjectId.keys.join(', ')}');
+
+      // Process each session and find matching attendance data
+      final enrichedSessions = <Session>[];
+      int matchesFound = 0;
+
+      for (final session in sessions) {
+        var enrichedSession = session;
+        final matchingAttendanceDocs = attendanceBySubjectId[session.id] ?? [];
+
+        debugPrint('[ATTENDANCE DEBUG] Checking session: ${session.subject} (ID: ${session.id})');
+        debugPrint('[ATTENDANCE DEBUG] Found ${matchingAttendanceDocs.length} matching attendance docs');
+        debugPrint('[USER CHECK] Checking schedule: ${session.subject} (ID: ${session.id})');
+        debugPrint('[USER CHECK] Found ${matchingAttendanceDocs.length} matching attendance docs');
+
+        for (final doc in matchingAttendanceDocs) {
+          try {
+            debugPrint('[ATTENDANCE DEBUG] Checking attendance doc ${doc.id} for student $userId');
+
+            // Get the student's attendance record
+            final studentRef = doc.reference.collection('students').doc(userId);
+            debugPrint('[ATTENDANCE DEBUG] Looking up: ${studentRef.path}');
+
+            final studentAttendanceDoc = await studentRef.get();
+
+            if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
+              debugPrint('[ATTENDANCE DEBUG] ✅ Found student attendance record!');
+              final attendanceData = studentAttendanceDoc.data()!;
+
+              final statusValue = attendanceData['status'];
+              debugPrint('[ATTENDANCE DEBUG] Status: $statusValue');
+
+              // Update the session with attendance data
+              final status = _parseAttendanceStatus(statusValue);
+              enrichedSession = Session(
+                id: session.id,
+                subject: session.subject,
+                section: session.section,
+                room: session.room,
+                roomType: session.roomType,
+                weekday: session.weekday,
+                startMinutes: session.startMinutes,
+                endMinutes: session.endMinutes,
+                colorHex: session.colorHex,
+                instructorId: session.instructorId,
+                instructorName: session.instructorName,
+                status: status,
+                firstSeen: _parseTimestamp(attendanceData['firstSeen']),
+                lastSeen: _parseTimestamp(attendanceData['lastSeen']),
+                source: _strOrNull(attendanceData['source']),
+                academicStatus: _strOrNull(attendanceData['academicStatus']),
+                studentId: userId,
+                updatedAt: _parseTimestamp(attendanceData['updatedAt']),
+                studentNo: _strOrNull(attendanceData['studentNo']),
+              );
+
+              matchesFound++;
+              // Break after finding the first match
+              break;
+            } else {
+              debugPrint('[ATTENDANCE DEBUG] ❌ Student record not found in attendance session');
+            }
+          } catch (e) {
+            debugPrint('[ATTENDANCE DEBUG] Error processing attendance for session ${session.id}: $e');
+          }
+        }
+
+        enrichedSessions.add(enrichedSession);
+      }
+
+      debugPrint('[ATTENDANCE DEBUG] Enrichment complete. Found attendance data for $matchesFound out of ${sessions.length} sessions');
+      debugPrint('[USER CHECK] SUMMARY: Found attendance data for $matchesFound out of ${sessions.length} sessions');
+      debugPrint('[ATTENDANCE DEBUG] ======================================');
+
+      return enrichedSessions;
+    } catch (e) {
+      debugPrint('[ATTENDANCE DEBUG] Error enriching sessions with attendance data: $e');
+      return sessions;
     }
   }
 
-  Future<List<Session>> _fetchRegularStudentSchedule({required Map<String, dynamic> userDetails, required Map<String, String> academicIds}) async {
-    final pathIds = {
-      'departmentId': _idOf(userDetails['department']),
-      'courseId': _idOf(userDetails['course']),
-      'yearLevelId': _idOf(userDetails['yearLevel']),
-      'sectionId': _idOf(userDetails['section']),
-    };
-
-    if (pathIds.containsValue(null)) throw Exception('Your account is missing required academic information.');
-
-    final sectionPath = 'academic_years/${academicIds['academicYearId']}/semesters/${academicIds['semesterId']}/departments/${pathIds['departmentId']}/courses/${pathIds['courseId']}/year_levels/${pathIds['yearLevelId']}/sections/${pathIds['sectionId']}';
-    final query = _db.doc(sectionPath).collection('schedules');
-    final snap = await query.get();
-
-    final sectionName = _strOrNull(userDetails['sectionName']);
-    final itemsWithData = snap.docs.map((doc) => _mapDocToSessions(doc, sectionName: sectionName)).toList();
-    return itemsWithData.expand((sessions) => sessions).toList();
+  String _formatDateStr(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  Future<List<Session>> _fetchIrregularStudentSchedule({required String uid, required Map<String, String> academicIds}) async {
-    final query = _db.collectionGroup('enrolled_students').where(FieldPath.documentId, isEqualTo: uid);
-    final enrolledSnap = await query.get();
-    if (enrolledSnap.docs.isEmpty) return [];
+  DateTime? _parseTimestamp(dynamic value) {
+    if (value == null) return null;
+    if (value is Timestamp) {
+      return value.toDate();
+    }
+    return null;
+  }
 
-    final scheduleRefs = enrolledSnap.docs.map((doc) => doc.reference.parent.parent).where((ref) => ref != null).toList();
+  AttendanceStatus _parseAttendanceStatus(dynamic statusValue) {
+    if (statusValue == null) return AttendanceStatus.scheduled;
 
-    final activeSchedules = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
-    for(final ref in scheduleRefs) {
-      if(ref!.path.contains(academicIds['academicYearId']!) && ref.path.contains(academicIds['semesterId']!)) {
-        final doc = await ref.get();
-        if(doc.exists) activeSchedules.add(doc as QueryDocumentSnapshot<Map<String, dynamic>>);
-      }
+    final rawValue = statusValue.toString();
+    final status = rawValue.toLowerCase().trim();
+
+    debugPrint('[STATUS PARSER] Raw status value: "$rawValue"');
+    debugPrint('[STATUS PARSER] Lowercase status: "$status"');
+
+    // First handle direct lowercase comparisons
+    if (status == 'present') return AttendanceStatus.present;
+    if (status == 'late') return AttendanceStatus.late;
+    if (status == 'absent') return AttendanceStatus.absent;
+    if (status == 'excused') return AttendanceStatus.excused;
+
+    // Then handle partial matches
+    if (status.contains('present')) return AttendanceStatus.present;
+    if (status.contains('late')) return AttendanceStatus.late;
+    if (status.contains('absent')) return AttendanceStatus.absent;
+    if (status.contains('excused')) return AttendanceStatus.excused;
+
+    // Special handling for ongoing status
+    if (status == 'ongoing') {
+      debugPrint('[STATUS PARSER] Found ongoing status - treating as scheduled');
+      return AttendanceStatus.scheduled;
     }
 
-    final itemsWithData = await Future.wait(activeSchedules.map((doc) async {
-      String? sectionName;
-      final sectionDocRef = doc.reference.parent.parent;
-      if (sectionDocRef != null) {
-        final sectionDoc = await sectionDocRef.get();
-        sectionName = _strOrNull(sectionDoc.data()?['sectionName']);
-      }
-      return _mapDocToSessions(doc, sectionName: sectionName);
-    }));
+    debugPrint('[STATUS PARSER] ⚠️ UNRECOGNIZED STATUS: "$rawValue" - defaulting to scheduled');
+    return AttendanceStatus.scheduled;
+  }
 
-    return itemsWithData.expand((sessions) => sessions).toList();
+  @override
+  Future<List<Session>> getSessionsByStatus({
+    required String userId,
+    required String role,
+    required AttendanceStatus status,
+    required DateTime date,
+  }) async {
+    try {
+      // First, get all sessions for the day
+      final (sessionsByDate, _) = await getSessionsForRange(
+        userId: userId,
+        role: role,
+        start: date,
+        end: date,
+      );
+
+      // Filter sessions by the requested status
+      final allSessions = sessionsByDate[date] ?? [];
+      return allSessions.where((session) => session.status == status).toList();
+    } catch (e) {
+      debugPrint('Error fetching sessions by status: $e');
+      return [];
+    }
+  }
+
+  Future<List<Session>> _fetchStudentSchedulesWithCollectionGroup({
+    required String uid,
+    required ActiveTerm activeTerm
+  }) async {
+    final enrolledSessions = <Session>[];
+    // First, get the student document to retrieve their id field
+    final studentDoc = await _db.collection('users').doc('student').collection('accounts').doc(uid).get();
+    if (!studentDoc.exists) {
+      debugPrint("[AttendanceService] Student document not found: $uid");
+      return [];
+    }
+    // Get the actual id field from the document
+    final studentIdField = _strOrNull(studentDoc.data()?['id']);
+
+    if (studentIdField == null) {
+      debugPrint("[AttendanceService] Student document missing id field: $uid");
+      return [];
+    }
+    // Create path patterns for filtering
+    final termPathPattern = 'academic_years/${activeTerm.academicYearId}/semesters/${activeTerm.semesterId}';
+    final schedulesPattern = '/schedules/';
+
+    try {
+      // Query for enrollments where studentId matches the id field from the student document
+      final enrollmentsQuery = _db.collectionGroup('enrolled_students')
+          .where('studentId', isEqualTo: studentIdField);
+
+      final enrollmentsSnapshot = await enrollmentsQuery.get();
+      // Filter by path to ensure we only get enrollments from the active term
+      final validEnrollments = enrollmentsSnapshot.docs.where((doc) {
+        final path = doc.reference.path;
+        return path.contains(termPathPattern) && path.contains(schedulesPattern);
+      }).toList();
+      // Process each valid enrollment (remaining implementation unchanged)
+      final futures = validEnrollments.map((doc) async {
+        // Get the parent schedule
+        final scheduleRef = doc.reference.parent.parent;
+        if (scheduleRef == null) return <Session>[];
+
+        final scheduleDoc = await scheduleRef.get();
+        if (!scheduleDoc.exists) return <Session>[];
+
+        // Get section info
+        final sectionRef = scheduleRef.parent.parent;
+        String? sectionName;
+
+        if (sectionRef != null) {
+          final sectionDoc = await sectionRef.get();
+          sectionName = _strOrNull(sectionDoc.data()?['sectionName']);
+        }
+        // Map to sessions
+        return _mapDocToSessions2(scheduleDoc, sectionName: sectionName);
+      });
+      // Wait for all processing to complete
+      final results = await Future.wait(futures);
+      // Combine all sessions
+      for (final sessions in results) {
+        enrolledSessions.addAll(sessions);
+      }
+    } catch (e) {
+      debugPrint("[AttendanceService] Error fetching student schedules: $e");
+    }
+    return enrolledSessions;
   }
 
   // --- Detail Panel Fetching ---
 
   @override
-  Future<List<SectionStudent>> fetchStudentsForSection({required String sectionName, required String scheduleId}) async {
-    try {
-      final regularQuery = _db.collectionGroup('accounts').where('role', isEqualTo: 'Student').where('academicStatus', isEqualTo: 'regular').where('sectionName', isEqualTo: sectionName);
-      final regularSnap = await regularQuery.get();
-      final regularStudents = regularSnap.docs.map((d) => SectionStudent(uid: d.id, name: _combineName(d.data(), fallback: 'Unknown'), photoURL: _strOrNull(d.data()['photoURL']))).toList();
+  @override
+  Future<List<SectionStudent>> fetchStudentsForSection({
+    required String sectionName,
+    required String scheduleId
+  }) async {
+    debugPrint("[Roster] Fetching students for section $sectionName, schedule $scheduleId using streaming");
 
-      final scheduleQuery = _db.collectionGroup('schedules').where(FieldPath.documentId, isEqualTo: scheduleId).limit(1);
+    // Create a completer to convert stream to future
+    final completer = Completer<List<SectionStudent>>();
+
+    try {
+      // First find the schedule using collection group query
+      final scheduleQuery = _db.collectionGroup('schedules')
+          .where(FieldPath.documentId, isEqualTo: scheduleId)
+          .limit(1);
+
       final scheduleSnap = await scheduleQuery.get();
-      if(scheduleSnap.docs.isEmpty) {
-        regularStudents.sort((a, b) => a.name.compareTo(b.name));
-        return regularStudents;
+
+      if (scheduleSnap.docs.isEmpty) {
+        debugPrint("[Roster] Schedule not found");
+        return [];
       }
+
+      // Get the schedule reference
       final scheduleRef = scheduleSnap.docs.first.reference;
 
-      final irregularQuery = scheduleRef.collection('enrolled_students');
-      final irregularSnap = await irregularQuery.get();
-      final irregularStudentUIDs = irregularSnap.docs.map((d) => d.id).toList();
+      // Create a StreamController to manage the student data
+      final controller = StreamController<SectionStudent>();
+      final allStudents = <String, SectionStudent>{};
 
-      var irregularStudents = <SectionStudent>[];
-      if (irregularStudentUIDs.isNotEmpty) {
-        final studentDetailsQuery = _db.collection('users/Student/accounts').where(FieldPath.documentId, whereIn: irregularStudentUIDs);
-        final studentDetailsSnap = await studentDetailsQuery.get();
-        irregularStudents = studentDetailsSnap.docs.map((d) => SectionStudent(uid: d.id, name: _combineName(d.data(), fallback: 'Unknown'), photoURL: _strOrNull(d.data()['photoURL']))).toList();
+      // Set up the stream listener to collect students
+      // final subscription = controller.stream.listen(
+      //         (student) {
+      //       // Add each student to our map (automatically deduplicates by uid)
+      //       allStudents[student.uid] = student;
+      //     },
+      //     onDone: () {
+      //       // When stream is closed, sort students and complete the future
+      //       final finalRoster = allStudents.values.toList();
+      //       finalRoster.sort((a, b) => a.name.compareTo(b.name));
+      //       completer.complete(finalRoster);
+      //     },
+      //     onError: (error) {
+      //       completer.completeError(error);
+      //     }
+      // );
+
+      // Start streaming enrollment data
+      final enrolledStudentsSnap = await scheduleRef.collection('enrolled_students').get();
+
+      if (enrolledStudentsSnap.docs.isEmpty) {
+        // No students enrolled, close stream and return empty list
+        await controller.close();
+        return [];
       }
 
-      final allStudents = <String, SectionStudent>{};
-      for (final s in regularStudents) { allStudents[s.uid] = s; }
-      for (final s in irregularStudents) { allStudents[s.uid] = s; }
+      // Process each enrollment doc asynchronously
+      int pendingOperations = enrolledStudentsSnap.docs.length;
 
-      final finalRoster = allStudents.values.toList();
-      finalRoster.sort((a, b) => a.name.compareTo(b.name));
-      return finalRoster;
+      for (final enrollDoc in enrolledStudentsSnap.docs) {
+        // Get studentId from enrollment document
+        final studentIdField = _strOrNull(enrollDoc.data()['studentId']);
+
+        if (studentIdField == null || studentIdField.isEmpty) {
+          // Skip invalid enrollments
+          pendingOperations--;
+          if (pendingOperations == 0) {
+            await controller.close();
+          }
+          continue;
+        }
+
+        // Process each student document asynchronously
+        _db.collection('users').doc('student').collection('accounts')
+            .doc(enrollDoc.id)
+            .get()
+            .then((studentDoc) {
+          if (studentDoc.exists && studentDoc.data() != null) {
+            // Get id field for validation
+            final idField = _strOrNull(studentDoc.data()!['id']);
+
+            // Validate id field matches studentId field
+            if (idField == studentIdField) {
+              // Create student object and add to stream
+              final student = SectionStudent(
+                uid: studentDoc.id,
+                name: _combineName(studentDoc.data()!, fallback: 'Unknown Student'),
+                photoURL: _strOrNull(studentDoc.data()!['photoURL']),
+              );
+
+              controller.add(student);
+              debugPrint("[Roster] Streamed student: ${student.name}");
+            }
+          }
+
+          // Decrement pending operations counter
+          pendingOperations--;
+          if (pendingOperations == 0) {
+            // All operations completed, close the stream
+            controller.close();
+          }
+        }).catchError((error) {
+          debugPrint("[Roster] Error processing student ${enrollDoc.id}: $error");
+          pendingOperations--;
+          if (pendingOperations == 0) {
+            controller.close();
+          }
+        });
+      }
+
+      // Return future that completes when all students are processed
+      return completer.future;
+
     } catch (e) {
-      debugPrint("[AttendanceService] Error fetching students for section '$sectionName': $e");
+      debugPrint("[Roster] Error in streaming approach: $e");
       return [];
     }
   }
 
   @override
   Future<InstructorDetails?> fetchInstructorDetails({required String instructorId}) async {
-    final doc = await _db.collection('users/teacher/accounts').doc(instructorId).get();
-    if (!doc.exists) return null;
-    return InstructorDetails(
+    if (instructorId.trim().isEmpty) {
+      return null;
+    }
+    final path = 'users/teacher/accounts';
+    final docRef = _db.collection(path).doc(instructorId);
+    final doc = await docRef.get();
+    if (!doc.exists) {
+      return null;
+    }
+    final details = InstructorDetails(
       name: _combineName(doc.data()!, fallback: 'Unknown Instructor'),
       departmentName: _strOrNull(doc.data()!['departmentName']),
       photoURL: _strOrNull(doc.data()!['photoURL']),
     );
+    return details;
   }
 
   // --- Internal Helpers ---
+  Future<ActiveTerm?> _findActiveTerm() async {
+    // Check cache first
+    const cacheKey = 'activeTerm';
+    if (_termCache.containsKey(cacheKey)) {
+      return _termCache[cacheKey];
+    }
 
-  Future<Map<String, String>?> _findActiveAcademicIds() async {
+    // Fetch from Firestore if not in cache
     final yearSnap = await _db.collection('academic_years').where('status', isEqualTo: 'Active').limit(1).get();
     if (yearSnap.docs.isEmpty) return null;
-    final yearId = yearSnap.docs.first.id;
 
-    final semSnap = await _db.collection('academic_years').doc(yearId).collection('semesters').where('status', isEqualTo: 'Active').limit(1).get();
+    final yearDoc = yearSnap.docs.first;
+    final semSnap = await yearDoc.reference.collection('semesters').where('status', isEqualTo: 'Active').limit(1).get();
     if (semSnap.docs.isEmpty) return null;
-    final semId = semSnap.docs.first.id;
 
-    return {'academicYearId': yearId, 'semesterId': semId};
+    final semDoc = semSnap.docs.first;
+    final semData = semDoc.data();
+    final startDateString = semData['startDate'] as String?;
+    final endDateString = semData['endDate'] as String?;
+    final startDate = (startDateString != null && startDateString.isNotEmpty) ? DateTime.parse(startDateString) : DateTime.now();
+    final endDate = (endDateString != null && endDateString.isNotEmpty) ? DateTime.parse(endDateString) : DateTime.now().add(const Duration(days: 120));
+
+    final term = ActiveTerm(
+        academicYearId: yearDoc.id,
+        semesterId: semDoc.id,
+        startDate: startDate,
+        endDate: endDate
+    );
+
+    // Store in cache
+    _termCache[cacheKey] = term;
+    return term;
   }
 
-  Future<Map<String, dynamic>?> _fetchUserDetails({required String role, required String uid}) async {
-    final snap = await _db.collection('users').doc(role).collection('accounts').doc(uid).get();
-    return snap.data();
-  }
-
-  List<Session> _mapDocToSessions(QueryDocumentSnapshot<Map<String, dynamic>> d, {String? sectionName}) {
-    final data = d.data();
-    final days = (data['days'] as List<dynamic>?)?.map((day) => _dayNameToWeekday(day.toString())).where((d) => d != -1).toList() ?? [];
+  // Helper for mapping regular DocumentSnapshot to Sessions
+  List<Session> _mapDocToSessions2(DocumentSnapshot<Map<String, dynamic>> d, {String? sectionName}) {
+    final data = d.data() ?? {};
+    final daysList = data['days'] as List<dynamic>? ?? [];
+    final weekdays = daysList.map((day) => _dayNameToWeekday(day.toString())).where((d) => d != -1).toList();
     final startStr = (data['startTime'] ?? data['timeStart'] ?? '').toString();
     final endStr = (data['endTime'] ?? data['timeEnd'] ?? '').toString();
-
-    return days.map((weekday) {
+    return weekdays.map((weekday) {
       return Session(
         id: d.id,
         subject: (data['subjectName'] ?? data['subjectCode'] ?? 'No Subject').toString(),
         section: sectionName ?? 'No Section',
         room: _strOrNull(data['roomName'] ?? data['room']) ?? 'N/A',
+        roomType: (data['roomType'] as String?)?.toUpperCase() ?? 'LECTURE',
         weekday: weekday,
         startMinutes: _parseTimeToMinutes(startStr),
         endMinutes: _parseTimeToMinutes(endStr),
@@ -281,12 +675,6 @@ class FirestoreAttendanceService implements AttendanceService {
         instructorName: (data['instructorName'] ?? 'N/A').toString(),
       );
     }).toList();
-  }
-
-  String? _idOf(dynamic v) {
-    if (v is DocumentReference) return v.id;
-    if (v is String && v.isNotEmpty) return v.contains('/') ? v.split('/').last : v;
-    return null;
   }
 
   String? _strOrNull(dynamic v) => (v ?? '').toString().trim().isEmpty ? null : v.toString().trim();
@@ -301,8 +689,8 @@ class FirestoreAttendanceService implements AttendanceService {
   int _dayNameToWeekday(String day) {
     final d = day.toLowerCase();
     if (d.startsWith('mon')) return 1; if (d.startsWith('tue')) return 2; if (d.startsWith('wed')) return 3;
-    if (d.startsWith('thu')) return 4; if (d.startsWith('fri')) return 5; if (d.startsWith('sat')) return 6;
-    if (d.startsWith('sun')) return 7;
+    if (d.startsWith('thu')) return 4; if (d.startsWith('fri')) return 5;
+    if (d.startsWith('sat')) return 6; if (d.startsWith('sun')) return 7;
     return -1;
   }
 

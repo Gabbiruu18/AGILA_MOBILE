@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async'; // Added for the Marquee widget timer
-import 'package:intl/intl.dart'; // Added for date formatting
-
 const kAgilaBlue = Color(0xFF0058CE);
 const kAgilaGold = Color(0xFFC88000);
 
@@ -1012,7 +1010,7 @@ class SlidingPanel extends StatelessWidget {
               height: 5,
               margin: const EdgeInsets.symmetric(vertical: 12),
               decoration: BoxDecoration(
-                color: Colors.grey[300],
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
@@ -1321,6 +1319,212 @@ class _MarqueeState extends State<Marquee> {
           Text(widget.text, style: widget.style),
           if (_scrollController.hasClients && _scrollController.position.maxScrollExtent > 0)
             SizedBox(width: widget.blankSpace),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================ Skeleton Loading ============================
+
+
+class ScheduleSkeletonLoading extends StatelessWidget {
+  final int itemCount;
+
+  const ScheduleSkeletonLoading({super.key, this.itemCount = 3});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Skeleton for title
+        Container(
+          width: 150,
+          height: 24,
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Skeleton items
+        ...List.generate(itemCount, (index) => Padding(
+          padding: const EdgeInsets.only(bottom: 12.0),
+          child: _buildSkeletonItem(context),
+        )),
+      ],
+    );
+  }
+
+  Widget _buildSkeletonItem(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // Subject name skeleton
+              Container(
+                width: 180,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+
+              // Time skeleton
+              Container(
+                width: 100,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Chips skeleton
+          Row(
+            children: [
+              Container(
+                width: 90,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 110,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Add this class as well for the full page skeleton
+class HomeSkeletonLoading extends StatelessWidget {
+  const HomeSkeletonLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header skeleton
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 100,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    width: 180,
+                    height: 20,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                width: 30,
+                height: 30,
+                decoration: const BoxDecoration(
+                  color: Colors.grey,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Tag chips skeleton
+          Row(
+            children: [
+              Container(
+                width: 90,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 110,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Date and notes boxes skeleton
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Container(
+                  height: 140,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Schedule skeleton
+          ScheduleSkeletonLoading(),
         ],
       ),
     );
