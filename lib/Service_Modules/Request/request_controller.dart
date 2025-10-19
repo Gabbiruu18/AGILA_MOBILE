@@ -3,6 +3,56 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:project_agila/Service_Modules/Request/request_UI.dart';
 import 'package:project_agila/Service_Modules/Request/request_service.dart';
 
+// Helper class to parse request data safely.
+// This can be in the same file or moved to a separate helpers file.
+class _RequestDataParser {
+  final Map<String, dynamic> data;
+
+  String senderName = 'Unknown';
+  String senderId = '';
+  String senderRole = '';
+  String recipientName = '—';
+  String recipientId = '';
+  String recipientRole = '';
+
+  _RequestDataParser(this.data) {
+    _parse();
+  }
+
+  void _parse() {
+    // --- Sender Parsing ---
+    senderRole = data['role'] ?? '';
+    if (senderRole.isEmpty) {
+      final fromKey = data.keys.firstWhere((k) => k.startsWith('from') && k.endsWith('Id'), orElse: () => '');
+      if (fromKey.isNotEmpty) {
+        senderRole = fromKey.replaceAll('from', '').replaceAll('Id', '').toLowerCase();
+      }
+    }
+
+    if (senderRole.isNotEmpty) {
+      final senderRoleKey = senderRole[0].toUpperCase() + senderRole.substring(1);
+      senderId = (data['from${senderRoleKey}Id'] ?? '').toString();
+      senderName = (data['from${senderRoleKey}Name'] ?? 'Unknown').toString();
+    }
+
+    // --- Recipient Parsing ---
+    recipientRole = data['recipientRole'] ?? '';
+    if (recipientRole.isEmpty) {
+      final toKey = data.keys.firstWhere((k) => k.startsWith('to') && k.endsWith('Id'), orElse: () => '');
+      if (toKey.isNotEmpty) {
+        recipientRole = toKey.replaceAll('to', '').replaceAll('Id', '').toLowerCase().replaceAll('_', '');
+      }
+    }
+
+    if (recipientRole.isNotEmpty) {
+      final recipientRoleKey = recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '');
+      recipientId = (data['to${recipientRoleKey}Id'] ?? '').toString();
+      recipientName = (data['to${recipientRoleKey}Name'] ?? '—').toString();
+    }
+  }
+}
+
+
 class RequestController {
   final String uid;
   final String role;
@@ -67,10 +117,10 @@ class RequestController {
 
       if (query.trim().isNotEmpty) {
         final q = query.toLowerCase();
+        final parser = _RequestDataParser(data);
         final type = (data['type'] ?? '').toString().toLowerCase();
-        final to = (data['to'] ?? '').toString().toLowerCase();
-        final name = (data['name'] ?? data['fromName'] ?? '').toString().toLowerCase();
-        if (!(type.contains(q) || to.contains(q) || name.contains(q))) return false;
+
+        if (!(type.contains(q) || parser.senderName.toLowerCase().contains(q) || parser.recipientName.toLowerCase().contains(q))) return false;
       }
       return true;
     }).toList();
@@ -83,7 +133,7 @@ class RequestController {
     required String senderUid,
     required String requestId,
     String? reason,
-    String? originalStatus, // Added for the "Undo" feature
+    String? originalStatus,
   }) async {
     try {
       await _service.updateStatus(
@@ -97,21 +147,19 @@ class RequestController {
         reason: reason,
       );
 
-      // If this was an undoable action, show the SnackBar
       if (originalStatus != null && context.mounted) {
         final snackBar = SnackBar(
           content: Text('Request ${newStatus.toLowerCase()}d.'),
           action: SnackBarAction(
             label: 'Undo',
             onPressed: () {
-              // Reverse the action by setting status back to original
               _updateStatus(
                 context: context,
                 newStatus: originalStatus,
                 senderRole: senderRole,
                 senderUid: senderUid,
                 requestId: requestId,
-                reason: '', // Clear the reason on undo
+                reason: '',
               );
             },
           ),
@@ -134,9 +182,8 @@ class RequestController {
     required Map<String, dynamic> data,
     required String requestId,
     required bool isReceived,
-    required String senderRole,
-    required String senderUid,
   }) {
+    final parser = _RequestDataParser(data);
     showModalBottomSheet(
       context: context,
       showDragHandle: true,
@@ -145,14 +192,13 @@ class RequestController {
         data: data,
         isStaff: isStaff,
         isReceived: isReceived,
-
         onUpdateStatus: (newStatus, reason) {
           Navigator.pop(context);
           _updateStatus(
             context: context,
             newStatus: newStatus,
-            senderRole: senderRole,
-            senderUid: senderUid,
+            senderRole: parser.senderRole,
+            senderUid: parser.senderId,
             requestId: requestId,
             reason: reason,
             originalStatus: (data['status'] ?? 'Pending').toString(),
@@ -172,21 +218,18 @@ class RequestController {
 
   Widget buildRequestItem(BuildContext context, DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
+    final parser = _RequestDataParser(data);
+
     final type = (data['type'] ?? 'Unknown').toString();
     final status = (data['status'] ?? 'Pending').toString();
-    final ts = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
-    final senderUid = (data['senderUid'] ?? '').toString();
-    final senderRole = (data['role'] ?? '').toString();
-    final fromName = (data['name'] ?? data['fromName'] ?? 'Unknown').toString();
-    final toName = (data['to'] ?? '—').toString();
+    final ts = (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
 
-    final decision = data['decision'] as Map<String, dynamic>?;
-    final remarks = (decision?['remarks'] ?? '').toString();
+    final decision = data['teacherDecision'] as Map<String, dynamic>? ?? {};
+    final remarks = (decision['remarks'] ?? '').toString();
 
     final isSentView = (showSent || !isStaff);
     final canAct = !isSentView && status == 'Pending';
 
-    // Helper function to show dialog and update status
     Future<void> handleDecision(bool isApproved) async {
       final reason = await showDialog<String>(
         context: context,
@@ -196,21 +239,20 @@ class RequestController {
         await _updateStatus(
           context: context,
           newStatus: isApproved ? 'Approved' : 'Rejected',
-          senderRole: senderRole,
-          senderUid: senderUid,
+          senderRole: parser.senderRole,
+          senderUid: parser.senderId,
           requestId: doc.id,
           reason: reason,
-          originalStatus: status, // Pass the original status for undo
+          originalStatus: status,
         );
       }
     }
 
-    // Build the card widget first
     final card = RequestCard(
       type: type,
       status: status,
-      toText: 'To: $toName',
-      fromText: 'From: $fromName (${senderRole.isEmpty ? '—' : senderRole})',
+      toText: 'To: ${parser.recipientName}',
+      fromText: 'From: ${parser.senderName} (${parser.senderRole.isEmpty ? '—' : parser.senderRole})',
       timestamp: ts,
       remarks: remarks,
       isSentView: isSentView,
@@ -219,14 +261,11 @@ class RequestController {
         data: data,
         requestId: doc.id,
         isReceived: !isSentView,
-        senderRole: senderRole,
-        senderUid: senderUid,
       ),
       onApprove: canAct ? () => handleDecision(true) : null,
       onReject: canAct ? () => handleDecision(false) : null,
     );
 
-    // Only wrap the card with Dismissible if the user can act on it
     if (canAct) {
       return Dismissible(
         key: ValueKey(doc.id),
@@ -235,13 +274,12 @@ class RequestController {
         confirmDismiss: (dir) async {
           final isApproved = dir == DismissDirection.startToEnd;
           await handleDecision(isApproved);
-          return false; // Do not dismiss, list will refresh
+          return false;
         },
         child: card,
       );
     }
 
-    // Otherwise, return the plain card
     return card;
   }
 }

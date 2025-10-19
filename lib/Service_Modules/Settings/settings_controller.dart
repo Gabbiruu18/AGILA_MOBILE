@@ -1,46 +1,70 @@
-import 'package:flutter/cupertino.dart';
-import 'package:flutter/foundation.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
-import '../../Screens/Theme/agila_theme.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:project_agila/Screens/Theme/agila_theme.dart';
+import 'package:project_agila/Service_Modules/Login//biometric_util.dart';
 import 'settings_service.dart';
 
 enum NotifSound { system, chime, bell, pop }
-
 extension NotifSoundX on NotifSound {
-  String get key => name; // for SharedPreferences
-  static NotifSound parse(String s) =>
-      NotifSound.values.firstWhere((e) => e.name == s, orElse: () => NotifSound.system);
-
-  /// Asset path for preview (null for 'system' since that's OS tone)
-  String? get assetPath => switch (this) {
-    NotifSound.system => null,
-    NotifSound.chime  => 'assets/sounds/chime.mp3',
-    NotifSound.bell   => 'assets/sounds/bell.mp3',
-    NotifSound.pop    => 'assets/sounds/pop.mp3',
-  };
-
-  /// Android raw resource name (no extension) if you mirror files to res/raw
-  String? get androidRaw => switch (this) {
-    NotifSound.system => null,
-    _ => name, // chime/bell/pop
-  };
+  String get key => name;
+  static NotifSound parse(String s) => NotifSound.values.firstWhere((e) => e.name == s, orElse: () => NotifSound.system);
+  String? get assetPath => switch (this) { NotifSound.system => null, NotifSound.chime => 'assets/sounds/chime.mp3', NotifSound.bell => 'assets/sounds/bell.mp3', NotifSound.pop => 'assets/sounds/pop.mp3' };
+  String? get androidRaw => switch (this) { NotifSound.system => null, _ => name };
 }
 
 class SettingsController extends ChangeNotifier {
-
   final SettingsService _svc;
   final AudioPlayer _player = AudioPlayer();
-  bool _isBusy = false;            // e.g. uploading image, saving contact
+  bool _isBusy = false;
 
   NotifSound selectedSound = NotifSound.system;
 
+  // --- ADDED: Notification Preference State ---
+  bool notificationsEnabled = true;
+
+  // Quick Login State
+  bool hasPasscode = false;
+  bool hasBiometrics = false;
+
+  bool canCheckBiometrics = false;
+  String? _uid;
+  String? _role;
+
   SettingsController({SettingsService? service}) : _svc = service ?? SettingsService();
 
-  Future<void> load() async {
-    final saved = await _svc.getNotificationSound();
-    selectedSound = NotifSoundX.parse(saved ?? 'system');
+  // ✅ CHANGED: accept uid and role
+  Future<void> load({required String uid, required String role}) async {
+    _isBusy = true;
     notifyListeners();
+
+    _uid = uid;
+    _role = role;
+
+    final savedSound = await _svc.getNotificationSound();
+    selectedSound = NotifSoundX.parse(savedSound ?? 'system');
+
+    final passcodeStatus = await _svc.getPasscodeStatus(_uid!);
+    hasPasscode = passcodeStatus['hasPasscode'];
+
+    notificationsEnabled = await _svc.getNotificationStatus(_uid!, _role!);
+
+    canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
+    if (canCheckBiometrics) {
+      hasBiometrics = await _svc.getBiometricStatus(_uid!);
+    }
+
+    _isBusy = false;
+    notifyListeners();
+  }
+
+  // --- ADDED: Notification Preference Method ---
+  Future<void> toggleNotifications(bool value) async {
+    if (_uid == null || _role == null) return;
+
+    notificationsEnabled = value;
+    notifyListeners(); // Update UI immediately for responsiveness
+    await _svc.setNotificationStatus(_uid!, _role!, enabled: value);
   }
 
   Future<void> setSound(NotifSound s) async {
@@ -51,77 +75,72 @@ class SettingsController extends ChangeNotifier {
 
   Future<void> preview() async {
     final asset = selectedSound.assetPath;
-    if (asset == null) return; // system tone can't be previewed as an asset
+    if (asset == null) return;
     await _player.stop();
     await _player.play(AssetSource(asset));
   }
 
+  Future<void> toggleBiometrics(BuildContext context, {required bool value}) async {
+    if (!canCheckBiometrics || _uid == null) return;
 
-  // add inside _ProfileScreenState
+    bool success = false;
+    if (value) {
+      final authenticated = await BiometricUtil.authenticateWithFingerprint(context);
+      if (authenticated) {
+        await _svc.setBiometricStatus(_uid!, enabled: true);
+        hasBiometrics = true;
+        success = true;
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometrics enabled")));
+      }
+    } else {
+      await _svc.setBiometricStatus(_uid!, enabled: false);
+      hasBiometrics = false;
+      success = true;
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometrics disabled")));
+    }
+
+    if (success) notifyListeners();
+  }
+
+  Future<void> removePasscode(BuildContext context) async {
+    if (_uid == null || _role == null) return;
+
+    await _svc.removePasscode(_uid!, _role!);
+    hasPasscode = false;
+    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passcode removed")));
+    notifyListeners();
+  }
+
+  Future<void> logout(BuildContext context) async {
+    final ok = await _confirmLogout(context);
+    if (ok != true) return;
+    _setBusy(true);
+    try {
+      await _svc.signOut();
+      if (context.mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
+      }
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sign out failed: $e')));
+    } finally {
+      _setBusy(false);
+    }
+  }
+
   Future<bool> _confirmLogout(BuildContext ctx) async {
     final result = await showDialog<bool>(
       context: ctx,
-      barrierDismissible: false,
       builder: (dialogCtx) => AlertDialog(
-        //backgroundColor: Color(0xFFFFFFFF),
-        title: Row(
-          children: const [
-            Icon(Icons.logout, color: Color(0xFF9A0017)),
-            SizedBox(width: 8),
-            Text('Confirm logout'),
-          ],
-        ),
+        title: Row(children: const [Icon(Icons.logout, color: Color(0xFF9A0017)), SizedBox(width: 8), Text('Confirm logout')]),
         content: const Text("You'll be signed out of AGILA. Continue?"),
         actions: [
-          // Cancel (Text color)
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx, false),
-            style: TextButton.styleFrom(
-              foregroundColor: kAgilaBlue, // <- text color
-            ),
-            child: const Text('Cancel'),
-          ),
-          // Confirm (FilledButton color)
-          FilledButton(
-            onPressed: () => Navigator.pop(dialogCtx, true),
-            style: FilledButton.styleFrom(
-              backgroundColor: Color(0xFF9A0017), // <- filled button color
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Log out'),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogCtx, false), style: TextButton.styleFrom(foregroundColor: kAgilaBlue), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(dialogCtx, true), style: FilledButton.styleFrom(backgroundColor: Color(0xFF9A0017), foregroundColor: Colors.white), child: const Text('Log out')),
         ],
       ),
     );
     return result ?? false;
-  }
-
-
-  Future<void> logout(BuildContext context) async {
-    // 1) Ask first
-    final ok = await _confirmLogout(context);
-    if (ok != true) return;
-
-    // 2) Proceed with sign out
-    _setBusy(true);
-    try {
-      await _svc.signOut();
-
-      if (context.mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Signed out')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Sign out failed: $e')),
-        );
-      }
-    } finally {
-      _setBusy(false);
-    }
   }
 
   void _setBusy(bool v) {

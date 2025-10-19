@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:project_agila/Screens/UI_Screen/notification.dart';
 import 'package:project_agila/Service_Modules/Home/home_controller.dart';
@@ -169,46 +168,48 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: SafeArea(
         child: controller.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-          padding: const EdgeInsets.only(bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              HeaderBar(
-                greeting: _greeting(),
-                name: controller.name, // Use the combined name from the controller
-                role: widget.role,
-                courseName: controller.course,
-                sectionName: controller.section,
-                departmentName: controller.departmentRaw,
-                unreadCount: controller.unreadCount,
-                onOpenNotifications: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => NotificationModal(uid: widget.uid, role: widget.role),
-                  );
-                },
-              ),
+            ? const HomeSkeletonLoading() // Use skeleton loading instead
+            : RefreshIndicator(
+          onRefresh: controller.refreshToday,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                HeaderBar(
+                  greeting: _greeting(),
+                  name: controller.name,
+                  role: widget.role,
+                  courseName: controller.course,
+                  sectionName: controller.section,
+                  departmentName: controller.departmentRaw,
+                  unreadCount: controller.unreadCount,
+                  onOpenNotifications: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => NotificationModal(uid: widget.uid, role: widget.role),
+                    );
+                  },
+                ),
 
-              const SizedBox(height: 8),
+                const SizedBox(height: 8),
 
-              TopBoxes(
-                monthYear: formattedMonthYear,
-                day: formattedDay,
-                dayNumber: formattedDayNumber,
-                onEditNotes: _openNotesDialog,
-                noteText: controller.noteText,
-              ),
+                TopBoxes(
+                  monthYear: formattedMonthYear,
+                  day: formattedDay,
+                  dayNumber: formattedDayNumber,
+                  onEditNotes: _openNotesDialog,
+                  noteText: controller.noteText,
+                ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                child: _buildScheduleSection(),
-              ),
-
-            ],
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: _buildScheduleSection(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -218,7 +219,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildScheduleSection() {
     // If schedules are still loading, show a spinner.
     if (controller.isLoadingSchedules) {
-      return const Center(child: CircularProgressIndicator());
+      return const ScheduleSkeletonLoading();
     }
 
     // If there was an error, display it clearly.
@@ -263,4 +264,18 @@ class _HomeScreenState extends State<HomeScreen> {
       onRoomTap: _onRoomChipTapped,
     );
   }
+
+
+// Add this helper method
+//   int _parseTimeToMinutes(String timeStr) {
+//     if (timeStr.isEmpty) return 0;
+//     final fmts = ['HH:mm', 'H:mm', 'hh:mm a', 'h:mm a'];
+//     for (final f in fmts) {
+//       try {
+//         final dt = DateFormat(f).parse(timeStr);
+//         return dt.hour * 60 + dt.minute;
+//       } catch (_) {}
+//     }
+//     return 0;
+//   }
 }

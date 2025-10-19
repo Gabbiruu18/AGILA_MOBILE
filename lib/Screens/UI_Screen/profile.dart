@@ -1,13 +1,7 @@
-// Screens/UI_Screen/profile.dart (or Service_Modules/Profile/profile.dart if that's your path)
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:project_agila/Screens/UI_Screen/settings.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_controller.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_UI.dart';
-
-
-const kAgilaBlue = Color(0xFF0058CE);
-const kAgilaGold = Color(0xFFC88000);
 
 class ProfileScreen extends StatefulWidget {
   final String role;
@@ -41,9 +35,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (mounted) setState(() {});
   }
 
-
-
-
   String _normalizeRole(String? role) =>
       (role ?? '').trim().toLowerCase().replaceAll(' ', '_');
 
@@ -57,12 +48,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'program_head':
       case 'programhead':
         return 'Program Head';
-      case 'academic_head':
-      case 'academichead':
-        return 'Academic Head';
-      case 'admin':
-      case 'administrator':
-        return 'Admin';
       default:
       // prettify whatever was stored in DB (e.g., "registrar head")
         return normalizedRole
@@ -92,17 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final roleLabel = _roleLabelFromRole(normalizedRole);
 
-
-
 // ✅ compute staff here (now you have the role)
     final isStaff = normalizedRole == 'teacher'
         || normalizedRole == 'teachers'
         || normalizedRole == 'program_head'
-        || normalizedRole == 'programhead'
-        || normalizedRole == 'academic_head'
-        || normalizedRole == 'academichead';
+        || normalizedRole == 'programhead';
 
-// keep your subtitle as-is
+// keep your subtitle as-isd
     final studheaderSubtitle = data['sectionName'] as String?;
     final staffheaderSubtitle = data['departmentName'] as String?;
 
@@ -121,7 +102,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: () {
-              showSettingsSheet(context);
+              showSettingsSheet(context, role: widget.role, uid: widget.uid);
             },
           ),
         ],
@@ -129,7 +110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 5),
         children: [
-          if (controller.isSyncing)
+          if (controller.isBusy) // ✅ CHANGED: from isSyncing to isBusy
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: LinearProgressIndicator(minHeight: 2),
@@ -205,27 +186,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
           SizedBox(height: 16),
-
-          // Tools (show for staff or everyone if you prefer)
-          /*InfoCard(
-            title: 'Tools',
-            children: [
-              ListTile(
-                dense: true,
-                leading: Icon(Icons.logout, color: Colors.red),
-                title: Text(
-                  'Logout',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
-                ),
-                onTap: () async {
-                  await controller.logout(context); // controller handles confirm + sign out
-                },
-
-              ),
-
-            ],
-          ),
-          SizedBox(height: 8),*/
         ],
       ),
     );

@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+    xmlns:tools="http://schemas.android.com/tools"
+    package="com.example.project_agila">
 
     <uses-sdk android:minSdkVersion="21" android:targetSdkVersion="35" />
     <uses-permission android:name="android.permission.CAMERA" />
@@ -18,6 +19,7 @@
         android:label="AGILA"
         android:icon="@mipmap/logo_agila"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/Theme.AppCompat.Light.NoActionBar">
 
         <activity
@@ -46,6 +48,14 @@
 
         <meta-data android:name="android:requestLegacyExternalStorage"
             android:value="true"/>
+
+        <!-- ADD THESE TWO LINES -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="high_importance_channel" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@mipmap/ic_launcher" />
     </application>
 
     <!-- Intent Query for Text Processing -->

@@ -8,11 +8,11 @@ class RequestHistoryModal extends StatelessWidget {
   final String name;
 
   const RequestHistoryModal({
-    Key? key,
+    super.key,
     required this.uid,
     required this.role,
     required this.name,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {

@@ -1,114 +1,277 @@
 import 'package:flutter/material.dart';
 import 'attendance_service.dart';
 
+// These UI-specific models remain here as they are only used by the Attendance UI.
+enum ViewMode { daily, weekly, monthly }
+
+class SubjectDayGroup {
+  final String subjectDisplay;
+  final List<Session> sessions;
+  const SubjectDayGroup({required this.subjectDisplay, required this.sessions});
+}
+
+class SubjectWeekItem {
+  final String subjectDisplay;
+  final List<AttendanceStatus?> statuses;
+  final int attended;
+  final int total;
+  const SubjectWeekItem({
+    required this.subjectDisplay,
+    required this.statuses,
+    required this.attended,
+    required this.total,
+  });
+}
+
+class SubjectTotals {
+  final String subjectDisplay;
+  final int attended;
+  final int total;
+  const SubjectTotals({required this.subjectDisplay, required this.attended, required this.total});
+}
+
+class AttendanceStatusCounts {
+  final int present;
+  final int late;
+  final int absent;
+  final int excused;
+
+  const AttendanceStatusCounts({
+    this.present = 0,
+    this.late = 0,
+    this.absent = 0,
+    this.excused = 0,
+  });
+
+  int get total => present + late + absent + excused;
+
+  AttendanceStatusCounts copyWith({
+    int? present,
+    int? late,
+    int? absent,
+    int? excused,
+  }) {
+    return AttendanceStatusCounts(
+      present: present ?? this.present,
+      late: late ?? this.late,
+      absent: absent ?? this.absent,
+      excused: excused ?? this.excused,
+    );
+  }
+}
+
 class AttendanceState {
   final ViewMode mode;
   final DateTime anchor;
-  final Counts counts;
+  final ActiveTerm? activeTerm;
   final List<SubjectDayGroup> dailyGroups;
   final List<SubjectWeekItem> weeklyItems;
   final List<SubjectTotals> monthlyTotals;
   final bool loading;
   final String? error;
+  final AttendanceStatusCounts statusCounts;
+  final List<Session>? filteredSessions; // For showing sessions by status
+  final AttendanceStatus? selectedStatus; // Currently selected status filter
 
   const AttendanceState({
     required this.mode,
     required this.anchor,
-    required this.counts,
+    this.activeTerm,
     required this.dailyGroups,
     required this.weeklyItems,
     required this.monthlyTotals,
     required this.loading,
     required this.error,
+    required this.statusCounts,
+    this.filteredSessions,
+    this.selectedStatus,
   });
 
   AttendanceState copyWith({
     ViewMode? mode,
     DateTime? anchor,
-    Counts? counts,
+    ActiveTerm? activeTerm,
     List<SubjectDayGroup>? dailyGroups,
     List<SubjectWeekItem>? weeklyItems,
     List<SubjectTotals>? monthlyTotals,
     bool? loading,
-    Object? error = const _NoChange<String?>(), // sentinel stays
+    Object? error = const _NoChange<String?>(),
+    AttendanceStatusCounts? statusCounts,
+    Object? filteredSessions = const _NoChange<List<Session>?>(),
+    Object? selectedStatus = const _NoChange<AttendanceStatus?>(),
   }) {
     return AttendanceState(
       mode: mode ?? this.mode,
       anchor: anchor ?? this.anchor,
-      counts: counts ?? this.counts,
+      activeTerm: activeTerm ?? this.activeTerm,
       dailyGroups: dailyGroups ?? this.dailyGroups,
       weeklyItems: weeklyItems ?? this.weeklyItems,
       monthlyTotals: monthlyTotals ?? this.monthlyTotals,
       loading: loading ?? this.loading,
-      error: error is _NoChange ? this.error : error as String?, // cast to String?
+      error: error is _NoChange ? this.error : error as String?,
+      statusCounts: statusCounts ?? this.statusCounts,
+      filteredSessions: filteredSessions is _NoChange ? this.filteredSessions : filteredSessions as List<Session>?,
+      selectedStatus: selectedStatus is _NoChange ? this.selectedStatus : selectedStatus as AttendanceStatus?,
     );
   }
 
   static AttendanceState initial(DateTime now) => AttendanceState(
     mode: ViewMode.daily,
     anchor: now,
-    counts: const Counts(0, 0, 0),
     dailyGroups: const [],
     weeklyItems: const [],
     monthlyTotals: const [],
     loading: false,
     error: null,
+    statusCounts: const AttendanceStatusCounts(),
+    filteredSessions: null,
+    selectedStatus: null,
   );
 }
 
-// helper to allow nullable field no-change in copyWith
-class _NoChange<T> {
-  const _NoChange();
-}
+class _NoChange<T> { const _NoChange(); }
 
 class AttendanceController extends ChangeNotifier {
   final AttendanceService service;
   final String userId;
+  final String role;
   AttendanceState _state = AttendanceState.initial(DateTime.now());
   AttendanceState get state => _state;
 
-  AttendanceController({required this.service, required this.userId});
+  AttendanceController({required this.service, required this.userId, required this.role});
 
-  // ---- Normalize all boundaries to date-only (00:00) ----
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
-
-  // Period helpers (use date-only consistently)
   DateTime _startOfDay(DateTime d) => _dateOnly(d);
+  DateTime _endOfDay(DateTime d) => _dateOnly(d).add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
+  DateTime _startOfWeek(DateTime d) => _dateOnly(d).subtract(Duration(days: d.weekday - 1));
+  DateTime _endOfWeek(DateTime d) => _startOfWeek(d).add(const Duration(days: 6, hours: 23, minutes: 59));
+  DateTime _startOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
+  DateTime _endOfMonth(DateTime d) => DateTime(d.year, d.month + 1, 0, 23, 59);
 
-  DateTime _startOfWeek(DateTime d) {
-    final sd = _dateOnly(d);
-    return sd.subtract(Duration(days: sd.weekday - 1)); // Monday 00:00
+  bool get isToday => _dateOnly(state.anchor) == _dateOnly(DateTime.now());
+
+  bool get canShiftNext {
+    final term = state.activeTerm;
+    if (term == null) return false; // Cannot shift if we don't know the term boundaries.
+
+    // final currentAnchor = _dateOnly(state.anchor);
+    final termEnd = _dateOnly(term.endDate);
+
+    // NEW: If the current view is already at or past the end date, disable the button.
+    // if (currentAnchor.isAfter(termEnd) || currentAnchor == termEnd) {
+    //   return false;
+    // }
+
+    // Original logic to prevent going past tomorrow, capped by term end
+    final now = DateTime.now();
+    DateTime boundary = _dateOnly(now).add(const Duration(days: 1));
+    if (termEnd.isBefore(boundary)) {
+      boundary = termEnd;
+    }
+
+    switch (state.mode) {
+      case ViewMode.daily:
+        return _dateOnly(state.anchor).isBefore(boundary);
+      case ViewMode.weekly:
+        final startOfNextWeek = _startOfWeek(state.anchor).add(const Duration(days: 7));
+        return !startOfNextWeek.isAfter(boundary);
+      case ViewMode.monthly:
+        final startOfNextMonth = DateTime(state.anchor.year, state.anchor.month + 1, 1);
+        return !startOfNextMonth.isAfter(boundary);
+    }
   }
 
-  DateTime _endOfWeek(DateTime d) => _startOfWeek(d).add(const Duration(days: 6));
+  bool get canShiftPrev {
+    final term = state.activeTerm;
+    if (term == null) return false;
 
-  DateTime _startOfMonth(DateTime d) => DateTime(d.year, d.month, 1);
+    // For Daily view: Allow viewing at least the past 30 days
+    if (state.mode == ViewMode.daily) {
+      final thirtyDaysAgo = _dateOnly(DateTime.now()).subtract(const Duration(days: 30));
+      final earliestAllowed = _dateOnly(term.startDate).isAfter(thirtyDaysAgo)
+          ? thirtyDaysAgo
+          : _dateOnly(term.startDate);
 
-  DateTime _endOfMonth(DateTime d) =>
-      DateTime(d.year, d.month + 1, 1).subtract(const Duration(days: 1));
+      return _dateOnly(state.anchor).isAfter(earliestAllowed);
+    }
+
+    // For other views: Keep the original term boundary logic
+    // final currentAnchor = _dateOnly(state.anchor);
+    final termStart = _dateOnly(term.startDate);
+
+    switch (state.mode) {
+      case ViewMode.weekly:
+        return _startOfWeek(state.anchor).isAfter(_startOfWeek(termStart));
+      case ViewMode.monthly:
+        return _startOfMonth(state.anchor).isAfter(_startOfMonth(termStart));
+      default:
+        return false; // Should not reach here
+    }
+  }
+
+  // bool get canShiftPrev {
+  //   final term = state.activeTerm;
+  //   if (term == null) return false; // Cannot shift if we don't know the term boundaries.
+  //
+  //   final currentAnchor = _dateOnly(state.anchor);
+  //   final termStart = _dateOnly(term.endDate);
+  //
+  //   // // NEW: If the current view is already at or before the start date, disable the button.
+  //   if (currentAnchor.isBefore(termStart) || currentAnchor == termStart) {
+  //      return false;
+  //    }
+  //
+  //   // Original logic to check against the start boundary
+  //   switch (state.mode) {
+  //     case ViewMode.daily:
+  //       return _dateOnly(state.anchor).isAfter(termStart);
+  //     case ViewMode.weekly:
+  //       return _startOfWeek(state.anchor).isAfter(_startOfWeek(termStart));
+  //     case ViewMode.monthly:
+  //       return _startOfMonth(state.anchor).isAfter(_startOfMonth(termStart));
+  //   }
+  // }
 
   void setMode(ViewMode m) {
-    // also normalize anchor to avoid stray time components
-    _state = _state.copyWith(mode: m, anchor: _dateOnly(_state.anchor));
+    _state = _state.copyWith(
+        mode: m,
+        anchor: _dateOnly(_state.anchor),
+        selectedStatus: null,
+        filteredSessions: null
+    );
     refresh();
   }
 
   void shiftPeriod(int delta) {
-    final m = _state.mode;
-    DateTime a = _state.anchor;
+    if (delta > 0 && !canShiftNext) return;
+    if (delta < 0 && !canShiftPrev) return;
+
+    final m = state.mode;
+    DateTime a = state.anchor;
     switch (m) {
-      case ViewMode.daily:
-        a = a.add(Duration(days: delta));
-        break;
-      case ViewMode.weekly:
-        a = a.add(Duration(days: 7 * delta));
-        break;
-      case ViewMode.monthly:
-        a = DateTime(a.year, a.month + delta, 1);
-        break;
+      case ViewMode.daily:   a = a.add(Duration(days: delta)); break;
+      case ViewMode.weekly:  a = a.add(Duration(days: 7 * delta)); break;
+      case ViewMode.monthly: a = DateTime(a.year, a.month + delta, 1); break;
     }
-    _state = _state.copyWith(anchor: _dateOnly(a)); // normalize after shift
+    _state = _state.copyWith(
+        anchor: _dateOnly(a),
+        selectedStatus: null,
+        filteredSessions: null
+    );
     refresh();
+  }
+
+  void jumpToDate(DateTime date) {
+    _state = _state.copyWith(
+        anchor: _dateOnly(date),
+        selectedStatus: null,
+        filteredSessions: null
+    );
+    refresh();
+  }
+
+  void jumpToToday() {
+    jumpToDate(DateTime.now());
   }
 
   String periodLabel() {
@@ -117,27 +280,70 @@ class AttendanceController extends ChangeNotifier {
     String d2(int d) => d.toString().padLeft(2, '0');
     String wd3(DateTime d) => ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d.weekday - 1];
 
-    switch (_state.mode) {
+    switch (state.mode) {
       case ViewMode.daily:
-        final s = _startOfDay(_state.anchor);
+        final s = _startOfDay(state.anchor);
+        if (isToday) return "Today";
+        final tomorrow = _dateOnly(DateTime.now()).add(const Duration(days: 1));
+        if (_dateOnly(s) == tomorrow) {
+          return "Tomorrow";
+        }
         return "${wd3(s)}, ${m3(s.month)} ${d2(s.day)}, ${s.year}";
       case ViewMode.weekly:
-        final s = _startOfWeek(_state.anchor);
-        final e = _endOfWeek(_state.anchor);
+        final s = _startOfWeek(state.anchor);
+        final e = _endOfWeek(state.anchor);
         return "${m3(s.month)} ${d2(s.day)} – ${m3(e.month)} ${d2(e.day)}, ${e.year}";
       case ViewMode.monthly:
-        final s = _startOfMonth(_state.anchor);
+        final s = _startOfMonth(state.anchor);
         return "${monthName(s.month)} ${s.year}";
     }
   }
 
-  int _sev(SessStatus st) {
-    switch (st) {
-      case SessStatus.absent:  return 3;
-      case SessStatus.late:    return 2;
-      case SessStatus.present: return 1;
-      case SessStatus.excused: return 1;
+  String _getSubjectDisplayKey(Session session) {
+    return '${session.subject} (${session.roomType})';
+  }
+
+  // New method to filter sessions by attendance status
+  Future<void> filterByStatus(AttendanceStatus status) async {
+    _state = _state.copyWith(loading: true);
+    notifyListeners();
+
+    try {
+      final sessions = await service.getSessionsByStatus(
+        userId: userId,
+        role: role,
+        status: status,
+        date: _state.anchor,
+      );
+
+      debugPrint('[FILTER] Filtering for status: ${status.name}');
+      debugPrint('[FILTER] Found ${sessions.length} matching sessions');
+
+      for (final session in sessions) {
+        debugPrint('[FILTER] Matching session: ${session.subject}');
+      }
+
+      _state = _state.copyWith(
+        filteredSessions: sessions,
+        selectedStatus: status,
+        loading: false,
+      );
+    } catch (e) {
+      _state = _state.copyWith(
+        error: "Failed to filter sessions: ${e.toString()}",
+        loading: false,
+      );
     }
+
+    notifyListeners();
+  }
+
+  void clearFilter() {
+    _state = _state.copyWith(
+      filteredSessions: null,
+      selectedStatus: null,
+    );
+    notifyListeners();
   }
 
   Future<void> refresh() async {
@@ -145,122 +351,109 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final (DateTime start, DateTime end) = switch (_state.mode) {
-        ViewMode.daily   => (_startOfDay(_state.anchor), _startOfDay(_state.anchor)),
-        ViewMode.weekly  => (_startOfWeek(_state.anchor), _endOfWeek(_state.anchor)),
-        ViewMode.monthly => (_startOfMonth(_state.anchor), _endOfMonth(_state.anchor)),
+
+      // We make a lightweight call to the service if the term isn't already in the state.
+      final currentactiveTerm = _state.activeTerm ?? await service.getSessionsForRange(
+        userId: userId, role: role, start: DateTime.now(), end: DateTime.now(),
+      ).then((res) => res.$2);
+
+      final (DateTime start, DateTime end) = switch (state.mode) {
+        ViewMode.daily   => (_startOfDay(state.anchor), _endOfDay(state.anchor)),
+        ViewMode.weekly  => (_startOfWeek(state.anchor), _endOfWeek(state.anchor)),
+        ViewMode.monthly => (_startOfMonth(state.anchor), _endOfMonth(state.anchor)),
       };
 
-      final sessionsByDate = await service.getSessionsForRange(
-        userId: userId, start: start, end: end,
+      final (sessionsByDate, termFromService) = await service.getSessionsForRange(
+        userId: userId, role: role, start: start, end: end,
       );
 
-      // ---- Counts across the period
-      int p = 0, l = 0, a = 0;
-      for (final entry in sessionsByDate.entries) {
-        for (final s in entry.value) {
-          final st = await service.getStatusFor(userId: userId, date: entry.key, session: s);
-          switch (st) {
-            case SessStatus.present: p++; break;
-            case SessStatus.late:    l++; break;
-            case SessStatus.excused: p++; break;
-            case SessStatus.absent:  a++; break;
+      // Calculate attendance status counts
+      var statusCounts = const AttendanceStatusCounts();
+      for (final sessions in sessionsByDate.values) {
+        for (final session in sessions) {
+          switch (session.status) {
+            case AttendanceStatus.present:
+              statusCounts = statusCounts.copyWith(present: statusCounts.present + 1);
+              break;
+            case AttendanceStatus.late:
+              statusCounts = statusCounts.copyWith(late: statusCounts.late + 1);
+              break;
+            case AttendanceStatus.absent:
+              statusCounts = statusCounts.copyWith(absent: statusCounts.absent + 1);
+              break;
+            case AttendanceStatus.excused:
+              statusCounts = statusCounts.copyWith(excused: statusCounts.excused + 1);
+              break;
+            default:
+              break;
           }
         }
       }
-      final counts = Counts(p, l, a);
 
-      // ---- Daily groups (for anchor date)
       List<SubjectDayGroup> dailyGroups = const [];
-      if (_state.mode == ViewMode.daily) {
-        final d = _startOfDay(_state.anchor);
+      if (state.mode == ViewMode.daily) {
+        final d = _startOfDay(state.anchor);
         final list = sessionsByDate[d] ?? const <Session>[];
         final map = <String, List<Session>>{};
         for (final s in list) {
-          final key = displayName(s);
-          map.putIfAbsent(key, () => []).add(s);
+          map.putIfAbsent(_getSubjectDisplayKey(s), () => []).add(s);
         }
-        final groups = map.entries.map((e) {
-          e.value.sort((a, b) => a.start.hour != b.start.hour
-              ? a.start.hour.compareTo(b.start.hour)
-              : a.start.minute.compareTo(b.start.minute));
+        dailyGroups = map.entries.map((e) {
+          e.value.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
           return SubjectDayGroup(subjectDisplay: e.key, sessions: e.value);
         }).toList()
           ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        dailyGroups = groups;
       }
 
-      // ---- Weekly items (Mon–Fri of this anchor week)
       List<SubjectWeekItem> weeklyItems = const [];
-      {
-        final mon = _startOfWeek(_state.anchor);
-        final byKey = <String, List<(int idx, Session s)>>{};
-        for (int i = 0; i < 5; i++) {
-          final d = mon.add(Duration(days: i));
-          final list = sessionsByDate[d] ?? const <Session>[];
-          for (final s in list) {
-            final key = displayName(s);
-            byKey.putIfAbsent(key, () => []);
-            byKey[key]!.add((i, s));
+      if (state.mode == ViewMode.weekly) {
+        final bySubject = <String, Map<int, Session>>{};
+        sessionsByDate.forEach((date, sessions) {
+          if (date.weekday > 5) return;
+          for (final s in sessions) {
+            bySubject.putIfAbsent(_getSubjectDisplayKey(s), () => {})[date.weekday] = s;
           }
-        }
+        });
 
-        final items = <SubjectWeekItem>[];
-        for (final entry in byKey.entries) {
-          final statuses = List<SessStatus?>.filled(5, null);
-          int attended = 0;
-          for (final pair in entry.value) {
-            final idx = pair.$1;
-            final date = mon.add(Duration(days: idx));
-            final st = await service.getStatusFor(userId: userId, date: date, session: pair.$2);
-
-            final cur = statuses[idx];
-            if (cur == null || _sev(st) > _sev(cur)) {
-              statuses[idx] = st;
-            }
-            if (st == SessStatus.present || st == SessStatus.late || st == SessStatus.excused) {
-              attended++;
+        weeklyItems = bySubject.entries.map((entry) {
+          final statuses = List<AttendanceStatus?>.filled(5, null);
+          for (int i = 1; i <= 5; i++) {
+            if (entry.value.containsKey(i)) {
+              statuses[i-1] = entry.value[i]!.status;
             }
           }
-          final weekFlags = List<bool>.generate(5, (i) => statuses[i] != null);
-          final total = entry.value.length;
-          items.add(SubjectWeekItem(
+          final attendedCount = statuses.where((s) => s == AttendanceStatus.present || s == AttendanceStatus.excused).length;
+          return SubjectWeekItem(
             subjectDisplay: entry.key,
-            week: weekFlags,
-            attended: attended,
-            total: total,
+            attended: attendedCount,
+            total: entry.value.length,
             statuses: statuses,
-          ));
-        }
-        items.sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        weeklyItems = items;
+          );
+        }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       }
 
-      // ---- Monthly totals (actual)
       List<SubjectTotals> monthlyTotals = const [];
-      {
-        final map = <String, (int att, int tot)>{};
-        for (final entry in sessionsByDate.entries) {
-          for (final s in entry.value) {
-            final name = displayName(s);
-            final st = await service.getStatusFor(userId: userId, date: entry.key, session: s);
-            final cur = map[name] ?? (0, 0);
-            final attInc = (st == SessStatus.present || st == SessStatus.late || st == SessStatus.excused) ? 1 : 0;
-            map[name] = (cur.$1 + attInc, cur.$2 + 1);
-          }
-        }
-        final list = map.entries
-            .map((e) => SubjectTotals(subjectDisplay: e.key, attended: e.value.$1, total: e.value.$2))
-            .toList()
-          ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-        monthlyTotals = list;
+      if (state.mode == ViewMode.monthly) {
+        final map = <String, List<Session>>{};
+        sessionsByDate.values.expand((s) => s).forEach((s) {
+          map.putIfAbsent(_getSubjectDisplayKey(s), () => []).add(s);
+        });
+        monthlyTotals = map.entries.map((e) {
+          final attendedCount = e.value.where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.excused).length;
+          return SubjectTotals(
+            subjectDisplay: e.key,
+            attended: attendedCount,
+            total: e.value.length,
+          );
+        }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       }
 
       _state = _state.copyWith(
-        counts: counts,
+        activeTerm: termFromService ?? currentactiveTerm,
         dailyGroups: dailyGroups,
         weeklyItems: weeklyItems,
         monthlyTotals: monthlyTotals,
+        statusCounts: statusCounts,
         loading: false,
         error: null,
       );
@@ -268,5 +461,13 @@ class AttendanceController extends ChangeNotifier {
       _state = _state.copyWith(loading: false, error: e.toString());
     }
     notifyListeners();
+  }
+
+  Future<List<SectionStudent>> viewSectionRoster(String sectionName, String scheduleId) {
+    return service.fetchStudentsForSection(sectionName: sectionName, scheduleId: scheduleId);
+  }
+
+  Future<InstructorDetails?> viewInstructorDetails(String instructorId) {
+    return service.fetchInstructorDetails(instructorId: instructorId);
   }
 }

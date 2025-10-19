@@ -13,9 +13,9 @@ class AddRequestModal extends StatefulWidget {
   final String role;
   final String name;
   final String academicYearId;
-  final String acadYear;
   final String semesterId;
   final String semesterName;
+  final String acadYear;
 
   const AddRequestModal({
     super.key,
@@ -40,23 +40,90 @@ class _AddRequestModalState extends State<AddRequestModal> {
   String _selectedType = 'To be Excused';
   bool _isSubmitting = false;
 
-  PlatformFile? _selectedFile;
-  UploadTask? _uploadTask;
+  List<PlatformFile> _selectedFiles = [];
+  Map<String, UploadTask> _uploadTasks = {};
 
   List<String> _teacherNames = [];
   List<String> _adminNames = [];
   bool _isLoadingTeachers = false;
   bool _isLoadingAdmins = false;
 
+  // New state variables for fetching academic data
+  Map<String, String>? _academicData;
+  String? _loadingError;
+
   @override
   void initState() {
     super.initState();
+    // Fetch academic data and recipient lists when the dialog opens
+    _initializeData();
+  }
+
+  Future<void> _initializeData() async {
+    await _fetchActiveAcademicData();
     if (widget.role == 'student') {
       _loadTeachers();
     } else if (widget.role == 'teacher') {
       _loadAdmins();
     }
   }
+
+  /// Fetches the active academic year and semester from Firestore.
+  Future<void> _fetchActiveAcademicData() async {
+    final firestore = FirebaseFirestore.instance;
+    try {
+      // 1. Find the active academic year
+      final yearQuery = await firestore
+          .collection('academic_years')
+          .where('status', isEqualTo: 'Active')
+          .limit(1)
+          .get();
+
+      if (yearQuery.docs.isEmpty) {
+        throw Exception("No active academic year found.");
+      }
+
+      final yearDoc = yearQuery.docs.first;
+      final academicYearId = yearDoc.id;
+      final acadYear = yearDoc.data()['acadYear'] as String;
+
+      // 2. Find the active semester within that year
+      final semesterQuery = await firestore
+          .collection('academic_years')
+          .doc(academicYearId)
+          .collection('semesters')
+          .where('status', isEqualTo: 'Active')
+          .limit(1)
+          .get();
+
+      if (semesterQuery.docs.isEmpty) {
+        throw Exception("No active semester found for the current academic year.");
+      }
+
+      final semesterDoc = semesterQuery.docs.first;
+      final semesterId = semesterDoc.id;
+      final semesterName = semesterDoc.data()['semesterName'] as String;
+
+      // 3. Set the data to the state
+      if (mounted) {
+        setState(() {
+          _academicData = {
+            'academicYearId': academicYearId,
+            'acadYear': acadYear,
+            'semesterId': semesterId,
+            'semesterName': semesterName,
+          };
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _loadingError = "Failed to load academic data: ${e.toString()}";
+        });
+      }
+    }
+  }
+
 
   Future<void> _loadTeachers() async {
     if (!mounted) return;
@@ -101,7 +168,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
   String _capitalizeRole(String role) {
     switch (role) {
       case 'program_head': return 'Program Head';
-      case 'academic_head': return 'Academic Coordinator';
+      case 'academic_head': return 'Academic Head';
       default: return 'Admin';
     }
   }
@@ -110,28 +177,39 @@ class _AddRequestModalState extends State<AddRequestModal> {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg'],
+      allowMultiple: true,
     );
 
     if (result == null) return;
 
-    final file = result.files.single;
-
     const maxSizeInBytes = 200 * 1024 * 1024;
-    if (file.size > maxSizeInBytes) {
-      if(mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File is too large (Max 200 MB).')),
-        );
+    List<PlatformFile> newFiles = [];
+    for (var file in result.files) {
+      if (file.size > maxSizeInBytes) {
+        if(mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${file.name} is too large (Max 200 MB).')),
+          );
+        }
+      } else {
+        newFiles.add(file);
       }
-      return;
     }
 
     setState(() {
-      _selectedFile = file;
+      _selectedFiles.addAll(newFiles);
     });
   }
 
   Future<void> _submitRequest() async {
+    // Prevent submission if academic data is not loaded
+    if (_academicData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_loadingError ?? 'Academic data is not loaded yet.')),
+      );
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill out all required fields.')),
@@ -152,7 +230,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
             _buildConfirmationDetail('Type:', _selectedType),
             _buildConfirmationDetail('To:', _toController.text),
             _buildConfirmationDetail('Reason:', _reasonController.text),
-            _buildConfirmationDetail('Attachment:', _selectedFile?.name ?? 'None'),
+            _buildConfirmationDetail('Attachments:', _selectedFiles.isNotEmpty ? _selectedFiles.map((f) => f.name).join(', ') : 'None'),
           ],
         ),
         actions: [
@@ -179,7 +257,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
 
       String recipientRole = 'teacher';
       if (_toController.text.contains('Program Head:')) recipientRole = 'program_head';
-      if (_toController.text.contains('Academic Coordinator:')) recipientRole = 'academic_head';
+      if (_toController.text.contains('Academic Head:')) recipientRole = 'academic_head';
       if (_toController.text.contains('Admin:')) recipientRole = 'admin';
 
       final parts = rawTo.split(' ');
@@ -207,37 +285,41 @@ class _AddRequestModalState extends State<AddRequestModal> {
           .doc();
       final requestId = sentRequestRef.id;
 
-      Map<String, dynamic>? attachmentData;
+      List<Map<String, dynamic>> attachmentsData = [];
 
-      // ✅ **FIXED**: Correctly handle the async file upload.
-      if (_selectedFile != null) {
-        final file = File(_selectedFile!.path!);
-        final path = 'attachments/${widget.role}_to_$recipientRole/${widget.uid}/$requestId/${_selectedFile!.name}';
-        final storageRef = FirebaseStorage.instance.ref().child(path);
-
-        // 1. Set the upload task in state to show the progress bar.
-        UploadTask uploadTask = storageRef.putFile(file);
+      if (_selectedFiles.isNotEmpty) {
+        Map<String, UploadTask> uploadTasks = {};
+        for (var selectedFile in _selectedFiles) {
+          final file = File(selectedFile.path!);
+          final path = 'attachments/${widget.role}_to_$recipientRole/${widget.uid}/$requestId/${selectedFile.name}';
+          final storageRef = FirebaseStorage.instance.ref().child(path);
+          uploadTasks[selectedFile.name] = storageRef.putFile(file);
+        }
         setState(() {
-          _uploadTask = uploadTask;
+          _uploadTasks = uploadTasks;
         });
 
-        // 2. Await the upload completion.
-        TaskSnapshot snapshot = await uploadTask;
-        final attachmentUrl = await snapshot.ref.getDownloadURL();
+        await Future.wait(_uploadTasks.values);
 
-        // 3. Create the attachment data map.
-        attachmentData = {
-          'name': _selectedFile!.name,
-          'size': _selectedFile!.size,
-          'contentType': lookupMimeType(_selectedFile!.path!),
-          'url': attachmentUrl,
-        };
+        for (var selectedFile in _selectedFiles) {
+          final task = _uploadTasks[selectedFile.name]!;
+          final snapshot = await task;
+          final attachmentUrl = await snapshot.ref.getDownloadURL();
+          attachmentsData.add({
+            'name': selectedFile.name,
+            'size': selectedFile.size,
+            'contentType': lookupMimeType(selectedFile.path!),
+            'url': attachmentUrl,
+          });
+        }
 
-        // 4. Update the state to hide the progress bar.
         setState(() {
-          _uploadTask = null;
+          _uploadTasks = {};
         });
       }
+
+      final senderRoleKey = widget.role[0].toUpperCase() + widget.role.substring(1);
+      final recipientRoleKey = recipientRole[0].toUpperCase() + recipientRole.substring(1).replaceAll('_', '');
 
       final data = {
         'type': _selectedType,
@@ -245,22 +327,19 @@ class _AddRequestModalState extends State<AddRequestModal> {
         'status': 'Pending',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        'acadYear': widget.acadYear,
-        'academicYearId': widget.academicYearId,
-        'semesterId': widget.semesterId,
-        'semesterName': widget.semesterName,
-        'fromStudentId': widget.uid,
-        'fromStudentName': widget.name,
-        'toTeacherId': recipientUid,
-        'toTeacherName': rawTo,
-        'attachments': attachmentData != null ? [attachmentData] : [],
-        // Legacy fields
-        'senderUid': widget.uid,
+        // Use the fetched academic data from the state
+        'acadYear': _academicData!['acadYear'],
+        'academicYearId': _academicData!['academicYearId'],
+        'semesterId': _academicData!['semesterId'],
+        'semesterName': _academicData!['semesterName'],
+        'from${senderRoleKey}Id': widget.uid,
+        'from${senderRoleKey}Name': widget.name,
+        'to${recipientRoleKey}Id': recipientUid,
+        'to${recipientRoleKey}Name': rawTo,
+        'attachments': attachmentsData,
         'role': widget.role,
-        'name': widget.name,
-        'to': rawTo,
-        'timestamp': FieldValue.serverTimestamp(),
-        'attachmentUrl': attachmentData?['url'] ?? '',
+        'recipientRole': recipientRole,
+        'teacherDecision': {}, // Initialize with an empty map for consistency
       };
 
       final batch = FirebaseFirestore.instance.batch();
@@ -311,6 +390,102 @@ class _AddRequestModalState extends State<AddRequestModal> {
     );
   }
 
+  /// Builds the main content of the form, handling loading and error states.
+  Widget _buildFormContent() {
+    // While fetching academic data, show a loading indicator
+    if (_academicData == null && _loadingError == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('Loading active academic period...'),
+          ],
+        ),
+      );
+    }
+
+    // If there was an error fetching data, show the error message
+    if (_loadingError != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            _loadingError!,
+            style: TextStyle(color: Theme.of(context).colorScheme.error),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
+
+    // Once data is loaded, show the form
+    return SingleChildScrollView(
+      child: Form(
+        key: _formKey,
+        child: Column(
+          children: [
+            _styledField(
+              child: DropdownButtonFormField<String>(
+                value: _selectedType,
+                decoration: _inputDecoration('Type of Request'),
+                dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                items: const [
+                  DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
+                  DropdownMenuItem(value: 'Permission', child: Text('Permission')),
+                  DropdownMenuItem(value: 'Submit Documents', child: Text('Submit Documents')),
+                  DropdownMenuItem(value: 'Other', child: Text('Other')),
+                ],
+                onChanged: (val) => setState(() => _selectedType = val!),
+                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+              ),
+            ),
+            _styledField(
+              child: (_isLoadingTeachers || _isLoadingAdmins)
+                  ? const Center(child: CircularProgressIndicator())
+                  : DropdownSearch<String>(
+                items: widget.role == 'student' ? _teacherNames : _adminNames,
+                selectedItem: _toController.text.isNotEmpty ? _toController.text : null,
+                dropdownDecoratorProps: DropDownDecoratorProps(
+                  dropdownSearchDecoration: _inputDecoration('To'),
+                ),
+                popupProps: const PopupProps.menu(showSearchBox: true, searchFieldProps: TextFieldProps(autofocus: true)),
+                onChanged: (val) => setState(() => _toController.text = val ?? ''),
+                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+              ),
+            ),
+            _styledField(
+              child: TextFormField(
+                controller: _reasonController,
+                maxLines: 3,
+                decoration: _inputDecoration('Reason/Description'),
+                validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _buildAttachmentSection(),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _isSubmitting ? null : _submitRequest,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                child: _isSubmitting
+                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
+                    : const Text('Submit Request', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -333,69 +508,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
             const Divider(),
             const SizedBox(height: 12),
             Expanded(
-              child: SingleChildScrollView(
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    children: [
-                      _styledField(
-                        child: DropdownButtonFormField<String>(
-                          value: _selectedType,
-                          decoration: _inputDecoration('Type of Request'),
-                          dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                          items: const [
-                            DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
-                            DropdownMenuItem(value: 'Permission', child: Text('Permission')),
-                            DropdownMenuItem(value: 'Submit Documents', child: Text('Submit Documents')),
-                            DropdownMenuItem(value: 'Other', child: Text('Other')),
-                          ],
-                          onChanged: (val) => setState(() => _selectedType = val!),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                        ),
-                      ),
-                      _styledField(
-                        child: (_isLoadingTeachers || _isLoadingAdmins)
-                            ? const Center(child: CircularProgressIndicator())
-                            : DropdownSearch<String>(
-                          items: widget.role == 'student' ? _teacherNames : _adminNames,
-                          selectedItem: _toController.text.isNotEmpty ? _toController.text : null,
-                          dropdownDecoratorProps: DropDownDecoratorProps(
-                            dropdownSearchDecoration: _inputDecoration('To'),
-                          ),
-                          popupProps: const PopupProps.menu(showSearchBox: true, searchFieldProps: TextFieldProps(autofocus: true)),
-                          onChanged: (val) => setState(() => _toController.text = val ?? ''),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                        ),
-                      ),
-                      _styledField(
-                        child: TextFormField(
-                          controller: _reasonController,
-                          maxLines: 3,
-                          decoration: _inputDecoration('Reason/Description'),
-                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      _buildAttachmentSection(),
-                      const SizedBox(height: 24),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton(
-                          onPressed: _isSubmitting ? null : _submitRequest,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Theme.of(context).colorScheme.primary,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: _isSubmitting
-                              ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 3, color: Colors.white))
-                              : const Text('Submit Request', style: TextStyle(fontSize: 16)),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              child: _buildFormContent(), // Use the new builder method here
             ),
           ],
         ),
@@ -404,69 +517,82 @@ class _AddRequestModalState extends State<AddRequestModal> {
   }
 
   Widget _buildAttachmentSection() {
-    if (_uploadTask != null) {
-      return StreamBuilder<TaskSnapshot>(
-        stream: _uploadTask!.snapshotEvents,
-        builder: (context, snapshot) {
-          if (snapshot.hasData) {
-            final progress = snapshot.data!.bytesTransferred / snapshot.data!.totalBytes;
-            return Column(
-              children: [
-                LinearProgressIndicator(
-                  value: progress,
-                  backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+    return Column(
+      children: [
+        if (_selectedFiles.isNotEmpty)
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _selectedFiles.length,
+            itemBuilder: (context, index) {
+              final file = _selectedFiles[index];
+              final uploadTask = _uploadTasks[file.name];
+
+              if (uploadTask != null) {
+                return StreamBuilder<TaskSnapshot>(
+                  stream: uploadTask.snapshotEvents,
+                  builder: (context, snapshot) {
+                    if (snapshot.hasData) {
+                      final progress = snapshot.data!.bytesTransferred / snapshot.data!.totalBytes;
+                      return Column(
+                        children: [
+                          LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                          ),
+                          const SizedBox(height: 4),
+                          Text('Uploading ${file.name}... ${(progress * 100).toStringAsFixed(0)}%'),
+                        ],
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                );
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                const SizedBox(height: 4),
-                Text('Uploading... ${(progress * 100).toStringAsFixed(0)}%'),
-              ],
-            );
-          }
-          return const SizedBox.shrink();
-        },
-      );
-    }
-
-    if (_selectedFile != null) {
-      return Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          children: [
-            Icon(_getIconForFile(p.extension(_selectedFile!.name)), color: Theme.of(context).colorScheme.primary),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _selectedFile!.name,
-                overflow: TextOverflow.ellipsis,
-              ),
+                child: Row(
+                  children: [
+                    Icon(_getIconForFile(p.extension(file.name)), color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        file.name,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text('(${(file.size / 1024 / 1024).toStringAsFixed(2)} MB)', style: Theme.of(context).textTheme.bodySmall),
+                    IconButton(
+                      visualDensity: VisualDensity.compact,
+                      icon: const Icon(Icons.close, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _selectedFiles.removeAt(index);
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        if (!_isSubmitting)
+          OutlinedButton.icon(
+            onPressed: _pickFile,
+            icon: const Icon(Icons.attach_file),
+            label: const Text('Attach Files'),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: Theme.of(context).colorScheme.outline),
             ),
-            const SizedBox(width: 4),
-            Text('(${( _selectedFile!.size / 1024 / 1024).toStringAsFixed(2)} MB)', style: Theme.of(context).textTheme.bodySmall),
-            IconButton(
-              visualDensity: VisualDensity.compact,
-              icon: const Icon(Icons.close, size: 18),
-              onPressed: () {
-                setState(() {
-                  _selectedFile = null;
-                  _uploadTask = null;
-                });
-              },
-            ),
-          ],
-        ),
-      );
-    }
-
-    return OutlinedButton.icon(
-      onPressed: _pickFile,
-      icon: const Icon(Icons.attach_file),
-      label: const Text('Attach File (Optional)'),
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: Theme.of(context).colorScheme.outline),
-      ),
+          ),
+      ],
     );
   }
 

@@ -1,12 +1,11 @@
-// lib/Screens/UI_Screen/settings.dart
 import 'package:flutter/material.dart';
-import '../../Screens/Theme/theme_scope.dart';
-import '../../Screens/Theme/theme_controller.dart';
-import '../../Service_Modules/Profile/profile_UI.dart';
-import '../../Service_Modules/Settings/settings_controller.dart'; // if you're using sound settings
+import 'package:project_agila/Screens/Theme/theme_scope.dart';
+import 'package:project_agila/Screens/Theme/theme_controller.dart';
+import 'package:project_agila/Service_Modules/Settings/settings_controller.dart';
 
-Future<bool?> showSettingsSheet(BuildContext context) {
-  return showModalBottomSheet<bool>(      // <- note the <bool>
+// ✅ CHANGED: accept role and uid
+Future<bool?> showSettingsSheet(BuildContext context, {required String role, required String uid}) {
+  return showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
@@ -14,30 +13,31 @@ Future<bool?> showSettingsSheet(BuildContext context) {
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
-    builder: (_) => const _SettingsSheet(),
+    builder: (_) => _SettingsSheet(role: role, uid: uid), // ✅ CHANGED: pass to widget
   );
 }
 
-
 class _SettingsSheet extends StatefulWidget {
-  const _SettingsSheet();
+  // ✅ CHANGED: accept role and uid
+  final String role;
+  final String uid;
+  const _SettingsSheet({required this.role, required this.uid});
 
   @override
   State<_SettingsSheet> createState() => _SettingsSheetState();
 }
 
 class _SettingsSheetState extends State<_SettingsSheet> {
-
-  late ThemeController _themeCtrl;            // <- don't grab in initState
+  late ThemeController _themeCtrl;
   late final SettingsController _settingsCtrl;
 
   @override
   void initState() {
     super.initState();
-    _settingsCtrl = SettingsController()..load();
+    // ✅ CHANGED: pass role and uid to controller
+    _settingsCtrl = SettingsController()..load(uid: widget.uid, role: widget.role);
   }
 
-  // ✅ Correct place to access ThemeScope (InheritedWidget)
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -85,7 +85,6 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
                 ],
               ),
-              // Theme toggle
               Card(
                 child: Column(
                   children: [
@@ -108,29 +107,67 @@ class _SettingsSheetState extends State<_SettingsSheet> {
                   ],
                 ),
               ),
-
               Card(
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     ListTile(
-                      dense: true,
-                      leading: Icon(Icons.logout, color: Colors.red),
-                      title: Text(
-                        'Logout',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                      title: Text("Quick Login", style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ),
+                    if (_settingsCtrl.canCheckBiometrics)
+                      SwitchListTile.adaptive(
+                        title: const Text("Use Biometrics"),
+                        value: _settingsCtrl.hasBiometrics,
+                        onChanged: (value) => _settingsCtrl.toggleBiometrics(context, value: value),
                       ),
-                      onTap: () async {
-                        await _settingsCtrl.logout(context); // controller handles confirm + sign out
-                      },
+                    ListTile(
+                      title: const Text("Passcode"),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(_settingsCtrl.hasPasscode ? "Enabled" : "Not Set", style: TextStyle(color: cs.outline)),
+                          const SizedBox(width: 8),
+                          if (_settingsCtrl.hasPasscode)
+                            IconButton(
+                              icon: Icon(Icons.delete_outline, color: cs.error),
+                              onPressed: () => _settingsCtrl.removePasscode(context),
+                              tooltip: "Remove Passcode",
+                            ),
+                        ],
+                      ),
                     ),
                   ],
-                )
+                ),
               ),
-              SizedBox(height: 8),
-              // (Optional) Notification sound block here if you added it…
 
+              // --- ADDED: Notification Settings Card ---
+              Card(
+                child: Column(
+                  children: [
+                    ListTile(
+                      title: Text("Notifications", style: TextStyle(fontWeight: FontWeight.bold, color: cs.primary)),
+                    ),
+                    SwitchListTile.adaptive(
+                      title: const Text("Receive Notifications"),
+                      value: _settingsCtrl.notificationsEnabled,
+                      onChanged: (value) => _settingsCtrl.toggleNotifications(value),
+                    ),
+                  ],
+                ),
+              ),
+              // --- END ADDED ---
 
+              Card(
+                child: ListTile(
+                  dense: true,
+                  leading: const Icon(Icons.logout, color: Colors.red),
+                  title: Text(
+                    'Logout',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.red, fontWeight: FontWeight.w600),
+                  ),
+                  onTap: () => _settingsCtrl.logout(context),
+                ),
+              ),
+              const SizedBox(height: 8),
             ],
           ),
         );
