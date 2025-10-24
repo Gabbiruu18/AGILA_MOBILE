@@ -39,6 +39,8 @@ Color statusBg(AttendanceStatus? st) {
     case AttendanceStatus.excused:   return const Color(0xFFE6F9FF); // Light blue for excused
     case AttendanceStatus.late:      return const Color(0xFFFFF1CC);
     case AttendanceStatus.absent:    return const Color(0xFFFFE0E0);
+    case AttendanceStatus.none:    return const Color(0xFFB2B2B2);
+
   }
 }
 Color statusFg(AttendanceStatus? st) {
@@ -49,10 +51,21 @@ Color statusFg(AttendanceStatus? st) {
     case AttendanceStatus.excused:   return const Color(0xFF0096C7); // Blue for excused
     case AttendanceStatus.late:      return const Color(0xFF9A6B00);
     case AttendanceStatus.absent:    return const Color(0xFFB3261E);
+    case AttendanceStatus.none:      return  Color(0xFF545353);
+
+
   }
 }
-String statusText(AttendanceStatus? st) {
+
+
+String statusText(AttendanceStatus? st, {String? source}) {
   if (st == null) return "N/A";
+
+  // // Special case for "No attendance session created"
+  // if (st == AttendanceStatus.absent && source == "No attendance session created") {
+  //   return "Done";
+  // }
+
   return st.name[0].toUpperCase() + st.name.substring(1);
 }
 
@@ -334,8 +347,11 @@ class DailyListScheduleLike extends StatelessWidget {
           section: session.section,
           room: session.room,
           timeLabel: fmtRange(session.startMinutes, session.endMinutes),
+
           // UPDATED: Pass the status enum directly.
           status: session.status,
+          source: session.source, // Add this line
+
           accentColor: _subjectAccent(session.subject),
           onViewDetails: () => onViewDetails(session),
         );
@@ -346,70 +362,229 @@ class DailyListScheduleLike extends StatelessWidget {
 
 class WeeklyList extends StatelessWidget {
   final List<SubjectWeekItem> items;
-  const WeeklyList({super.key, required this.items});
+  final void Function(SubjectWeekItem item)? onItemTap;
+  final void Function(SubjectWeekItem item, String roomType, int weekday)? onStatusTap;
+
+  const WeeklyList({
+    super.key,
+    required this.items,
+    this.onItemTap,
+    this.onStatusTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this week.")));
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: cardDeco(context),
+        child: const Center(child: Text("No subjects scheduled this week.")),
+      );
     }
+
     return ListView.builder(
-        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-        itemBuilder: (context, i) {
-          final it = items[i];
-          const days = ["M", "T", "W", "Th", "F"];
-          return Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDeco(context),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 10),
-                Row(
-                  children: List.generate(5, (i) {
-                    final st = it.statuses[i];
-                    return Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      // UPDATED: Use the new helper functions.
-                      decoration: BoxDecoration(color: statusBg(st), borderRadius: BorderRadius.circular(999)),
-                      child: Text(days[i], style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: statusFg(st))),
-                    );
-                  }),
+      itemCount: items.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (context, i) {
+        final item = items[i];
+        const days = ["M", "T", "W", "Th", "F", "S"];
+        final roomTypes = item.roomTypes;
+
+        return GestureDetector(
+          onTap: onItemTap != null ? () => onItemTap!(item) : null,
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.all(16),
+            decoration: cardDeco(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.subjectDisplay,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
-              ]));
-        });
+                const SizedBox(height: 10),
+
+                // Add a summary of attendance
+                Text(
+                  "Attendance: ${item.attended}/${item.total}",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Create a row for each room type
+                ...roomTypes.map((roomType) {
+                  final statuses = item.getStatusesForRoomType(roomType);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        // Room type label
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            roomType,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Status indicators for each day
+                        ...List.generate(6, (dayIndex) {
+                          // Safely get the status, defaulting to null if out of bounds.
+                          final status = (dayIndex < statuses.length) ? statuses[dayIndex] : null;
+                          final weekday = dayIndex + 1;
+
+                          return GestureDetector(
+                            onTap: status != null && onStatusTap != null
+                                ? () => onStatusTap!(item, roomType, weekday)
+                                : null,
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: statusBg(status),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                days[dayIndex],
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: statusFg(status),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
 class MonthlyList extends StatelessWidget {
   final List<SubjectTotals> items;
-  const MonthlyList({super.key, required this.items});
+  final void Function(SubjectTotals item)? onItemTap;
+
+  const MonthlyList({
+    super.key,
+    required this.items,
+    this.onItemTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this month.")));
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: cardDeco(context),
+        child: const Center(child: Text("No subjects scheduled this month.")),
+      );
     }
+
+    // Group items by subject
+    final bySubject = <String, List<SubjectTotals>>{};
+    for (final item in items) {
+      bySubject.putIfAbsent(item.subjectDisplay, () => []).add(item);
+    }
+
     return ListView.builder(
-        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-        itemBuilder: (context, i) {
-          final it = items[i];
-          final pct = it.total == 0 ? 0.0 : it.attended / it.total;
-          return Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDeco(context),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(child: Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                  Text("${it.attended}/${it.total}", style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-                ]),
-                const SizedBox(height: 10),
-                ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(minHeight: 8, value: pct, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation(cs.primary))),
-              ]));
-        });
+      itemCount: bySubject.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (context, i) {
+        final subjectName = bySubject.keys.elementAt(i);
+        final subjectItems = bySubject[subjectName]!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+              child: Text(
+                subjectName,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+            ...subjectItems.map((item) {
+              final pct = item.total == 0 ? 0.0 : item.attended / item.total;
+
+              return GestureDetector(
+                onTap: onItemTap != null ? () => onItemTap!(item) : null,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(16),
+                  decoration: cardDeco(context),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.roomType,
+                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            "${item.attended}/${item.total}",
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          minHeight: 8,
+                          value: pct,
+                          backgroundColor: cs.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation(cs.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -424,17 +599,19 @@ class TodayScheduleCard extends StatelessWidget {
   final AttendanceStatus status;
   final Color accentColor;
   final VoidCallback? onViewDetails;
+  final String? source; // Add this field
+
 
   const TodayScheduleCard({
     super.key, required this.subject, required this.section, required this.room,
     required this.timeLabel, required this.status, required this.accentColor,
-    this.onViewDetails, required this.roomType,
+    this.onViewDetails, required this.roomType, this.source
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final sLabel = statusText(status);
+    final sLabel = statusText(status, source: source); // Use the class field
     final sBg = statusBg(status);
     final sFg = statusFg(status);
 
@@ -533,11 +710,35 @@ class _SessionDetailsContent extends StatelessWidget {
         Text(session.section, style: Theme.of(context).textTheme.titleSmall),
         const Divider(height: 24),
 
+        // Special message for "No attendance session created" case
+        if (session.source == "No attendance session created")
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber, color: Colors.orange),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "No attendance session was created for this schedule.",
+                    style: TextStyle(color: Colors.orange[800]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
         // Attendance status chip
         if (session.status != AttendanceStatus.scheduled) ...[
           Row(
             children: [
-              Text("Attendance Status:", style: TextStyle(fontWeight: FontWeight.w600)),
+              const Text("Attendance Status:", style: TextStyle(fontWeight: FontWeight.w600)),
               const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -569,7 +770,7 @@ class _SessionDetailsContent extends StatelessWidget {
           const SizedBox(height: 8),
 
           // Attendance details
-          if (session.source != null)
+          if (session.source != null && session.source != "No attendance session created")
             _kv(context, Icons.source, 'Source', session.source!),
           if (session.firstSeen != null)
             _kv(context, Icons.login, 'First Seen', formatDateTime(session.firstSeen)),
@@ -577,10 +778,7 @@ class _SessionDetailsContent extends StatelessWidget {
             _kv(context, Icons.logout, 'Last Seen', formatDateTime(session.lastSeen)),
           if (session.updatedAt != null)
             _kv(context, Icons.update, 'Updated At', formatDateTime(session.updatedAt)),
-          if (session.academicStatus != null)
-            _kv(context, Icons.school, 'Academic Status', session.academicStatus!),
-          if (session.studentNo != null)
-            _kv(context, Icons.badge, 'Student No.', session.studentNo!),
+
 
           const Divider(height: 24),
         ],
@@ -689,15 +887,31 @@ class _InstructorDetailsContent extends StatelessWidget {
   const _InstructorDetailsContent({required this.details});
   @override
   Widget build(BuildContext context) {
-    return Column(children: [
-      CircleAvatar(radius: 40, backgroundImage: details.photoURL != null ? NetworkImage(details.photoURL!) : null, child: details.photoURL == null ? const Icon(Icons.person, size: 40) : null),
-      const SizedBox(height: 16),
-      Text(details.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-      if (details.departmentName != null) ...[
-        const SizedBox(height: 4),
-        Text(details.departmentName!, style: Theme.of(context).textTheme.bodyMedium),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        const SizedBox(height: 42), // Added top spacing
+        CircleAvatar(
+          radius: 65,
+          backgroundImage: details.photoURL != null ? NetworkImage(details.photoURL!) : null,
+          child: details.photoURL == null ? const Icon(Icons.person, size: 60) : null,
+        ),
+        const SizedBox(height: 16),
+        Text(
+          details.name,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
+        if (details.departmentName != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            details.departmentName!,
+            style: Theme.of(context).textTheme.bodyMedium,
+            textAlign: TextAlign.center,
+          ),
+        ],
       ],
-    ]);
+    );
   }
 }
 

@@ -156,6 +156,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: isStudent
                 ? [
               ReadonlyTile(
+                  icon: Icons.perm_identity_outlined,
+                  label: 'Student No.',
+                  value: data['studentNumber']),
+              ReadonlyTile(
+                  icon: Icons.card_membership,
+                  label: 'Academic Status',
+                  value: data['academicStatus']),
+              ReadonlyTile(
                   icon: Icons.computer_outlined,
                   label: 'Course',
                   value: data['courseAcronym']),
@@ -170,19 +178,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ]
                 : [
               ReadonlyTile(
+                  icon: Icons.perm_identity_outlined,
+                  label: 'Employee No.',
+                  value: data['employeeNumber']),
+              ReadonlyTile(
                   icon: Icons.apartment_outlined,
                   label: 'Department',
                   value: data['department']),
-              if ((data['subjects'] is List) &&
-                  (data['subjects'] as List).isNotEmpty)
-                ListTile(
-                  dense: true,
-                  leading: Icon(Icons.menu_book_outlined, color: Theme.of(context).colorScheme.primary),
-                  title: Text('Subjects Handled',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
-                  subtitle: Text((data['subjects'] as List).join(' • '),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith()),
-                ),
             ],
           ),
           SizedBox(height: 16),

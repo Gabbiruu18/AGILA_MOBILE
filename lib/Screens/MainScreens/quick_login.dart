@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:pinput/pinput.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // <-- ADD THIS IMPORT
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
 import '../../Service_Modules/Login/biometric_util.dart';
 import 'terms.dart';
@@ -25,39 +25,38 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   bool _isLoading = false;
   final TextEditingController pinController = TextEditingController();
 
+  static const _assetPath = 'assets/images/agila_opening.png';
+
+
   @override
   void initState() {
     super.initState();
     _loadInitialState();
   }
 
-  // This function checks and updates the FCM token if it has changed.
-  // Replace your existing function with this one.
   Future<void> _updateFCMToken(String role, String uid) async {
     try {
       final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
       final String? newToken = await _firebaseMessaging.getToken();
 
       if (newToken != null) {
+        debugPrint('FCM Token for quick login: $newToken');
 
-        // --- THIS IS THE CORRECTED FIRESTORE PATH ---
         final docRef = FirebaseFirestore.instance
             .collection('users')
-            .doc(role) // 'student', 'teacher', etc.
+            .doc(role)
             .collection('accounts')
             .doc(uid);
-        // --- END OF CORRECTION ---
 
         final userDoc = await docRef.get();
 
-        // Only write to Firestore if the document doesn't exist yet,
-        // or if the token has actually changed. This saves unnecessary database writes.
         if (!userDoc.exists || userDoc.data()?['fcmToken'] != newToken) {
           debugPrint('FCM Token is new or has been refreshed. Updating in Firestore.');
           await docRef.update({
             'fcmToken': newToken,
             'updatedAt': FieldValue.serverTimestamp(),
           });
+          debugPrint('FCM token updated successfully');
         }
       }
     } catch (e) {
@@ -91,7 +90,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
 
   Future<void> _fetchUserDetailsFromFirestore(String uid) async {
     try {
-      const roles = ['student', 'teacher', 'program_head', 'academic_head'];
+      const roles = ['student', 'teacher', 'program_head'];
       DocumentSnapshot<Map<String, dynamic>>? userDoc;
 
       for (final role in roles) {
@@ -218,7 +217,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      const roles = ['student', 'teacher', 'program_head', 'academic_head'];
+      const roles = ['student', 'teacher', 'program_head'];
       DocumentSnapshot<Map<String, dynamic>>? userDoc;
       String? userRole;
       for (final role in roles) {
@@ -283,7 +282,14 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
   }
 
   void _showTermsDialog() {
-    showDialog(context: context, barrierDismissible: false, builder: (_) => const TermsDialog());
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const TermsDialog(),
+    ).then((_) {
+      // When dialog is closed, reload the terms acceptance state
+      _loadInitialState();
+    });
   }
 
   Future<void> _toggleTerms(bool? value) async {
@@ -305,17 +311,15 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  RichText(
-                    text: TextSpan(
-                      children: [
-                        TextSpan(text: 'A', style: GoogleFonts.poppins(fontSize: 48, fontWeight: FontWeight.bold, color: const Color(0xFFFBB43C))),
-                        TextSpan(text: 'GILA', style: GoogleFonts.poppins(fontSize: 48, fontWeight: FontWeight.bold, color: const Color(0xFF0058CE))),
-                      ],
-                    ),
+                  Image.asset(
+                    _assetPath,
+                    width: 150,
+                    fit: BoxFit.contain,
+                    filterQuality: FilterQuality.high,
                   ),
-                  const SizedBox(height: 4),
-                  Text('AI-Driven General Identification and Logging Attendance', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 14, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 24),
+                  Text('AI-Guided Identification and Logging Classroom Monitoring Attendance', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 14, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 36),
                   Text(greeting, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 20, fontWeight: FontWeight.w700)),
                   const SizedBox(height: 8),
                   Text(displayName, style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: cs.primary ,fontSize: 16, fontWeight: FontWeight.w700)),

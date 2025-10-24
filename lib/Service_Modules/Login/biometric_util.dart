@@ -1,24 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
-// Removed 'package:cloud_firestore/cloud_firestore.dart' as it's no longer needed.
+import 'package:local_auth/error_codes.dart' as auth_error;
 
 class BiometricUtil {
   static final LocalAuthentication auth = LocalAuthentication();
 
   static Future<bool> checkBiometricAvailability() async {
     try {
-      // z
-      return await auth.canCheckBiometrics || await auth.isDeviceSupported();
+      bool canCheckBiometrics = await auth.canCheckBiometrics;
+      bool isDeviceSupported = await auth.isDeviceSupported();
+      debugPrint('Can check biometrics: $canCheckBiometrics');
+      debugPrint('Device supports biometrics: $isDeviceSupported');
+      return canCheckBiometrics && isDeviceSupported;
     } catch (e) {
-      // In case of any platform errors, log it and return false.
       debugPrint("Error checking biometric availability: $e");
       return false;
     }
   }
 
   static Future<bool> authenticateWithFingerprint(BuildContext context) async {
-    // --- 1. IMPROVED ROBUSTNESS: Check for availability first ---
+    // Check for availability first
     final isAvailable = await checkBiometricAvailability();
+    debugPrint('Biometric availability: $isAvailable');
+
     if (!isAvailable) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -28,29 +33,77 @@ class BiometricUtil {
       return false;
     }
 
+    // Get available biometrics
+    List<BiometricType> availableBiometrics = [];
+    try {
+      availableBiometrics = await auth.getAvailableBiometrics();
+      debugPrint('Available biometrics: $availableBiometrics');
+
+      if (availableBiometrics.isEmpty) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("No biometrics enrolled on this device. Please set up fingerprint in your device settings.")),
+          );
+        }
+        return false;
+      }
+    } catch (e) {
+      debugPrint("Error getting available biometrics: $e");
+      return false;
+    }
+
+    // Additional delay to ensure UI is ready
+    await Future.delayed(const Duration(milliseconds: 500));
+
     bool authenticated = false;
     try {
+      debugPrint("Attempting to show biometric authentication dialog...");
+
+      // Force showing the fingerprint dialog even if active
       authenticated = await auth.authenticate(
-        localizedReason: "Scan your fingerprint to login",
+        localizedReason: "Scan your fingerprint to authenticate",
         options: const AuthenticationOptions(
-          biometricOnly: true, // Only allow biometric (e.g., fingerprint, face ID)
-          stickyAuth: true,    // Keep the dialog open on app switch
+          biometricOnly: true,
+          stickyAuth: true,
+          useErrorDialogs: true,
         ),
       );
+
+      debugPrint("Biometric authentication result: $authenticated");
     } catch (e) {
       debugPrint("Biometric authentication error: $e");
+
+      // Handle specific errors
+      String errorMessage = "Authentication error";
+      if (e is PlatformException) {
+        switch (e.code) {
+          case auth_error.notAvailable:
+            errorMessage = "Biometrics not available on this device";
+            break;
+          case auth_error.notEnrolled:
+            errorMessage = "No biometrics enrolled on this device";
+            break;
+          case auth_error.lockedOut:
+            errorMessage = "Biometrics locked out due to too many attempts";
+            break;
+          case auth_error.permanentlyLockedOut:
+            errorMessage = "Biometrics permanently locked. Please unlock your device first";
+            break;
+          case auth_error.passcodeNotSet:
+            errorMessage = "Device security is not enabled";
+            break;
+          default:
+            errorMessage = "Authentication error: ${e.message}";
+        }
+      }
+
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("An error occurred during biometric authentication.")),
+          SnackBar(content: Text(errorMessage)),
         );
       }
     }
 
     return authenticated;
   }
-
-// --- 2. REMOVED INSECURE METHOD ---
-// The `getRegisteredUserEmail()` function was removed.
-// It was based on a flawed pattern. The new, secure architecture in `quick_login.dart`
-// uses the locally stored `rememberedUid` and `rememberedEmail`, making this method obsolete.
 }

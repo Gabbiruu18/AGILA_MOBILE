@@ -55,8 +55,19 @@ class _AddRequestModalState extends State<AddRequestModal> {
   @override
   void initState() {
     super.initState();
+
+    _selectedType = _getDefaultTypeForRole(widget.role);
     // Fetch academic data and recipient lists when the dialog opens
     _initializeData();
+  }
+
+
+  String _getDefaultTypeForRole(String role) {
+    if (role == 'teacher' || role == 'program_head') {
+      return 'Permission'; // Default for teachers and program heads
+    } else {
+      return 'To be Excused'; // Default for students and others
+    }
   }
 
   Future<void> _initializeData() async {
@@ -65,6 +76,27 @@ class _AddRequestModalState extends State<AddRequestModal> {
       _loadTeachers();
     } else if (widget.role == 'teacher') {
       _loadAdmins();
+    }
+  }
+
+
+  List<DropdownMenuItem<String>> _getDropdownItemsForRole(String role) {
+    if (role == 'teacher' || role == 'program_head') {
+      // Teacher and program_head specific options as seen in the image
+      return const [
+        DropdownMenuItem(value: 'Permission', child: Text('Permission')),
+        DropdownMenuItem(value: 'Schedule Adjustment', child: Text('Schedule Adjustment')),
+        DropdownMenuItem(value: 'Document Request', child: Text('Document Request')),
+        DropdownMenuItem(value: 'Other', child: Text('Other')),
+      ];
+    } else {
+      // Default options for students and other roles
+      return const [
+        DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
+        DropdownMenuItem(value: 'Permission', child: Text('Permission')),
+        DropdownMenuItem(value: 'Submit Documents', child: Text('Submit Documents')),
+        DropdownMenuItem(value: 'Other', child: Text('Other')),
+      ];
     }
   }
 
@@ -431,12 +463,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
                 value: _selectedType,
                 decoration: _inputDecoration('Type of Request'),
                 dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                items: const [
-                  DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
-                  DropdownMenuItem(value: 'Permission', child: Text('Permission')),
-                  DropdownMenuItem(value: 'Submit Documents', child: Text('Submit Documents')),
-                  DropdownMenuItem(value: 'Other', child: Text('Other')),
-                ],
+                items: _getDropdownItemsForRole(widget.role), // Use the helper method here
                 onChanged: (val) => setState(() => _selectedType = val!),
                 validator: (val) => val == null || val.isEmpty ? 'Required' : null,
               ),

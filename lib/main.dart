@@ -11,6 +11,9 @@ import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Screens/Theme/theme_scope.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 Future<void> setupForegroundNotifications() async {
@@ -51,6 +54,52 @@ Future<void> setupForegroundNotifications() async {
     }
   });
 }
+
+// NEW: FCM Token Manager class
+class FCMTokenManager {
+  static Future<void> cleanupTokenIfNeeded() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('rememberMe') ?? false;
+      final uid = prefs.getString('rememberedUid');
+
+      if (!rememberMe && uid != null) {
+        // User didn't choose "Remember Me" - clean up their FCM token
+        debugPrint('App closing without Remember Me - cleaning up FCM token');
+        await _cleanupFCMToken(uid);
+      }
+    } catch (e) {
+      debugPrint('Error in FCM token cleanup: $e');
+    }
+  }
+
+  static Future<void> _cleanupFCMToken(String uid) async {
+    try {
+      const roles = ['student', 'teacher', 'program_head'];
+      for (final role in roles) {
+        final docRef = FirebaseFirestore.instance
+            .collection('users')
+            .doc(role)
+            .collection('accounts')
+            .doc(uid);
+
+        final doc = await docRef.get();
+        if (doc.exists) {
+          // Found user document - remove FCM token
+          await docRef.update({
+            'fcmToken': FieldValue.delete(), // Completely removes the field
+            'updatedAt': FieldValue.serverTimestamp(),
+          });
+          debugPrint('FCM token deleted for user: $uid in role: $role');
+          break;
+        }
+      }
+    } catch (e) {
+      debugPrint('Error cleaning up FCM token: $e');
+    }
+  }
+}
+
 // -------------------------------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -77,20 +126,45 @@ Future<void> main() async {
   );
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   final ThemeController themeCtrl;
   const MyApp({super.key, required this.themeCtrl});
 
   @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.detached || state == AppLifecycleState.paused) {
+      // App is closing or going to background
+      FCMTokenManager.cleanupTokenIfNeeded();
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
-      animation: themeCtrl,
+      animation: widget.themeCtrl,
       builder: (context, _) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: agilaLight,
           darkTheme: agilaDark,
-          themeMode: themeCtrl.mode,
+          themeMode: widget.themeCtrl.mode,
           initialRoute: '/opening',
           routes: {
             '/opening': (context) => const OpeningScreen(),

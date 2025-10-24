@@ -1,40 +1,89 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // <-- ADD THIS IMPORT
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
-import 'package:project_agila/Service_Modules/Login//biometric_util.dart';
+import 'package:project_agila/Service_Modules/Login/biometric_util.dart';
+import 'package:local_auth/local_auth.dart';
 
 class AuthServices {
   // This function gets the device's token and saves it to Firestore.
   static Future<void> _getAndSaveFCMToken(String role, String uid) async {
     try {
+      // First check if "Remember Me" is enabled
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('rememberMe') ?? false;
+
+      // Added debugging
+      debugPrint('Remember Me status: $rememberMe');
+      debugPrint('Attempting to get FCM token for user $uid with role $role');
+
+      // Only proceed if "Remember Me" is enabled
+      if (!rememberMe) {
+        debugPrint('Remember Me not checked - FCM token will not be saved');
+        return;
+      }
+
       final FirebaseMessaging firebaseMessaging = FirebaseMessaging.instance;
-      await firebaseMessaging.requestPermission();
-      final String? token = await firebaseMessaging.getToken();
+      // Make sure to request permission BEFORE getting token
+      NotificationSettings settings = await firebaseMessaging.requestPermission(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
 
-      if (token != null) {
-        debugPrint('FCM Token: $token');
+      debugPrint('Notification permission status: ${settings.authorizationStatus}');
 
-        // --- THIS IS THE CORRECTED PATH LOGIC ---
-        // It builds the path exactly as the backend expects it.
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(role) // Uses the role ('student', 'teacher', etc.)
-            .collection('accounts')
-            .doc(uid)  // Uses the user's unique ID
-            .update({
-          'fcmToken': token,
-          'updatedAt': FieldValue.serverTimestamp(),
-        });
-        // --- END OF CORRECTION ---
+      if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+          settings.authorizationStatus == AuthorizationStatus.provisional) {
+        final String? token = await firebaseMessaging.getToken();
 
-        debugPrint('FCM token saved to Firestore at: users/$role/accounts/$uid');
+        if (token != null) {
+          debugPrint('FCM Token received: $token');
+
+          // Try/catch specifically for the Firestore operation
+          try {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(role)
+                .collection('accounts')
+                .doc(uid)
+                .update({
+              'fcmToken': token,
+              'updatedAt': FieldValue.serverTimestamp(),
+            });
+            debugPrint('FCM token successfully saved to Firestore');
+          } catch (firestoreError) {
+            debugPrint('Error saving FCM token to Firestore: $firestoreError');
+          }
+        } else {
+          debugPrint('FCM Token is null');
+        }
+      } else {
+        debugPrint('Notification permission denied');
       }
     } catch (e) {
       debugPrint('Error getting or saving FCM token: $e');
+    }
+  }
+
+  // Method to explicitly clean up FCM token when needed
+  static Future<void> cleanupFCMToken(String role, String uid) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(role)
+          .collection('accounts')
+          .doc(uid)
+          .update({
+        'fcmToken': FieldValue.delete(), // Remove the field completely
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      debugPrint('FCM token removed for user: $uid in role: $role');
+    } catch (e) {
+      debugPrint('Error cleaning up FCM token: $e');
     }
   }
 
@@ -62,8 +111,7 @@ class AuthServices {
 
       if (userData == null || role == null) throw Exception("User data or role not found in Firestore.");
 
-      // --- THIS IS THE ADDED LINE ---
-      // After we confirm the user exists and we have their role, save the token.
+      // Save FCM token only after we have the user role and if "Remember Me" is checked
       await _getAndSaveFCMToken(role, uid);
 
       final prefs = await SharedPreferences.getInstance();
@@ -119,30 +167,69 @@ class AuthServices {
       final canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
 
       if (!hasBiometrics && !biometricSetupSkipped && canCheckBiometrics) {
-        final enableBiometric = await _showRegisterFingerprintDialog(context);
-        if (!context.mounted) return;
-        if (enableBiometric) {
-          final authenticated = await BiometricUtil.authenticateWithFingerprint(context);
-          if (authenticated) {
-            await prefs.setBool('biometric_enabled_for_uid_$uid', true);
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometric login enabled!")));
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometric setup cancelled.")));
-          }
-        } else {
+        debugPrint('Checking for biometric registration eligibility');
+
+        if (context.mounted) {
+          await showDialog(
+            context: context,
+            builder: (dialogContext) => AlertDialog(
+              title: const Text("Fingerprint Login Available"),
+              content: const Text("You can enable fingerprint authentication for faster login through the Settings menu."),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text("OK"),
+                ),
+              ],
+            ),
+          );
+
+          // Mark that the user has been notified about biometrics
           await prefs.setBool('biometric_setup_skipped_for_uid_$uid', true);
         }
+
       }
 
     } on FirebaseAuthException catch (e) {
       String message = "Login Failed: An unknown error occurred.";
       if (e.code == 'user-not-found' || e.code == 'invalid-email') {
         message = "Login Failed: No user found with that email.";
-      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') message = "Login Failed: Incorrect password.";
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') message = "Login Failed: Incorrect email or password.";
       else if (e.code == 'network-request-failed') message = "Login Failed: Please check your network connection.";
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: An unexpected error occurred.")));
+    }
+  }
+
+  // Improved biometric registration method with better error handling
+
+  // Add an explicit logout method (uses the existing one from settings_service.dart)
+  static Future<void> logout(BuildContext context, String role, String uid) async {
+    try {
+      // Clean up FCM token first
+      await cleanupFCMToken(role, uid);
+
+      // Then sign out from Firebase Auth
+      await FirebaseAuth.instance.signOut();
+
+      // Clear shared preferences
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('rememberMe');
+      await prefs.remove('rememberedEmail');
+      await prefs.remove('rememberedUid');
+
+      // Navigate back to login
+      if (context.mounted) {
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
+      }
+    } catch (e) {
+      debugPrint('Error during logout: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Logout error: ${e.toString()}")),
+        );
+      }
     }
   }
 
@@ -214,20 +301,5 @@ class AuthServices {
         ],
       ),
     );
-  }
-
-  static Future<bool> _showRegisterFingerprintDialog(BuildContext context) async {
-    return await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text("Enable Biometric Login?"),
-        content: const Text("Would you like to use your fingerprint for faster login on this device?"),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text("No, Thanks")),
-          FilledButton(onPressed: () => Navigator.of(context).pop(true), child: const Text("Yes, Enable")),
-        ],
-      ),
-    ) ?? false;
   }
 }

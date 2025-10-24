@@ -2,10 +2,6 @@ fixed bugs and errors
 
 **NEED TO DO:**
 
-**ADD GLENOS TV ROLE AND MODULES
-TAENA ANOTHER UI NANAMAN**
-
-
 **No more Face Registration and Face Recognition screen**
 
 **Notifications:** Request sent and received notification shows
@@ -20,10 +16,8 @@ TAENA ANOTHER UI NANAMAN**
 
 - **ATTENDANCE(Student)** Enrolled subjects Schedules fetching, Attendance is now being fetch.
   ADDED: Excused card UI, Attendance details.
-  
-            TO DO: Simulate Possible scenarios, Does Attendance to unenrolled subject schedule counts?.
 
-            Enrolled Students list of subject schedule are not showing.
+            Enrolled Students list of subject schedule are now showing.
 
 - **SCHEDULE(teacher)** it is now showing all data, but a few more UI Tweaks and some 
   Data logic fetching need some fixes. and waiting if the teachers need to see their attendance too.
@@ -45,8 +39,8 @@ TAENA ANOTHER UI NANAMAN**
             fingerprint store in local meaning only on the device.
 
 **Main screens**
-
-            NEED TO FIX: Fingerprint Registration not working, need to go tosetting to register.
+-
+            if Fingerprint is available, it will show the Fingerprint Availability message
 
 Fix bugs: Black screen when opening the app again even it runs on the background.
 

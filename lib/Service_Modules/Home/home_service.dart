@@ -123,7 +123,7 @@ class HomeService {
       }
 
       final userData = userDoc.data()!;
-      final studentIdField = _strOrNull(userData['id']);
+      final studentIdField = _strOrNull(userData['userId']) ?? _strOrNull(userData['id']);
 
       if (studentIdField == null) {
         // No ID field found in user document, can't proceed

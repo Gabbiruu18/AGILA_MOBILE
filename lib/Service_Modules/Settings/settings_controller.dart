@@ -3,6 +3,7 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Service_Modules/Login//biometric_util.dart';
+import '../Login/auth_m.dart';
 import 'settings_service.dart';
 
 enum NotifSound { system, chime, bell, pop }
@@ -83,23 +84,40 @@ class SettingsController extends ChangeNotifier {
   Future<void> toggleBiometrics(BuildContext context, {required bool value}) async {
     if (!canCheckBiometrics || _uid == null) return;
 
-    bool success = false;
+    // If user is trying to enable biometrics
     if (value) {
+      // Add delay to ensure UI is ready
+      await Future.delayed(const Duration(milliseconds: 300));
+
       final authenticated = await BiometricUtil.authenticateWithFingerprint(context);
+      debugPrint("Authentication result from settings: $authenticated");
+
       if (authenticated) {
         await _svc.setBiometricStatus(_uid!, enabled: true);
         hasBiometrics = true;
-        success = true;
-        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometrics enabled")));
+        if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Biometrics enabled successfully"))
+        );
+        notifyListeners();
+      } else {
+        // Reset the toggle if authentication failed
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Biometric setup failed or was cancelled"))
+          );
+        }
+        // We don't change hasBiometrics state, so the UI will revert back
+        notifyListeners();
       }
     } else {
+      // User is disabling biometrics
       await _svc.setBiometricStatus(_uid!, enabled: false);
       hasBiometrics = false;
-      success = true;
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometrics disabled")));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Biometrics disabled"))
+      );
+      notifyListeners();
     }
-
-    if (success) notifyListeners();
   }
 
   Future<void> removePasscode(BuildContext context) async {
@@ -116,9 +134,16 @@ class SettingsController extends ChangeNotifier {
     if (ok != true) return;
     _setBusy(true);
     try {
-      await _svc.signOut();
+      // Use the AuthServices.logout method instead
+      if (_uid != null && _role != null) {
+        await AuthServices.logout(context, _role!, _uid!);
+      } else {
+        await _svc.signOut();
+        if (context.mounted) {
+          Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+        }
+      }
       if (context.mounted) {
-        Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Signed out')));
       }
     } catch (e) {
@@ -127,6 +152,7 @@ class SettingsController extends ChangeNotifier {
       _setBusy(false);
     }
   }
+
 
   Future<bool> _confirmLogout(BuildContext ctx) async {
     final result = await showDialog<bool>(

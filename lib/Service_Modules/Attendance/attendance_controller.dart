@@ -12,22 +12,50 @@ class SubjectDayGroup {
 
 class SubjectWeekItem {
   final String subjectDisplay;
-  final List<AttendanceStatus?> statuses;
+  final Map<int, Map<String, AttendanceStatus>> sessionStatuses; // weekday -> roomType -> status
   final int attended;
   final int total;
+
   const SubjectWeekItem({
     required this.subjectDisplay,
-    required this.statuses,
+    required this.sessionStatuses,
     required this.attended,
     required this.total,
   });
+
+  // Helper method to get statuses for a specific room type
+  List<AttendanceStatus?> getStatusesForRoomType(String roomType) {
+    final statuses = List<AttendanceStatus?>.filled(5, null);
+    for (int i = 1; i <= 5; i++) {
+      if (sessionStatuses.containsKey(i) && sessionStatuses[i]!.containsKey(roomType)) {
+        statuses[i-1] = sessionStatuses[i]![roomType];
+      }
+    }
+    return statuses;
+  }
+
+  // Get all unique room types for this subject
+  List<String> get roomTypes {
+    final types = <String>{};
+    for (final weekday in sessionStatuses.keys) {
+      types.addAll(sessionStatuses[weekday]!.keys);
+    }
+    return types.toList();
+  }
 }
 
 class SubjectTotals {
   final String subjectDisplay;
+  final String roomType;
   final int attended;
   final int total;
-  const SubjectTotals({required this.subjectDisplay, required this.attended, required this.total});
+
+  const SubjectTotals({
+    required this.subjectDisplay,
+    required this.roomType,
+    required this.attended,
+    required this.total,
+  });
 }
 
 class AttendanceStatusCounts {
@@ -70,8 +98,11 @@ class AttendanceState {
   final bool loading;
   final String? error;
   final AttendanceStatusCounts statusCounts;
-  final List<Session>? filteredSessions; // For showing sessions by status
-  final AttendanceStatus? selectedStatus; // Currently selected status filter
+  final List<Session>? filteredSessions;
+  final AttendanceStatus? selectedStatus;
+  // New properties to store detailed sessions for weekly and monthly views
+  final List<Session> weeklyDetails;
+  final List<Session> monthlyDetails;
 
   const AttendanceState({
     required this.mode,
@@ -85,6 +116,8 @@ class AttendanceState {
     required this.statusCounts,
     this.filteredSessions,
     this.selectedStatus,
+    required this.weeklyDetails,
+    required this.monthlyDetails,
   });
 
   AttendanceState copyWith({
@@ -99,6 +132,8 @@ class AttendanceState {
     AttendanceStatusCounts? statusCounts,
     Object? filteredSessions = const _NoChange<List<Session>?>(),
     Object? selectedStatus = const _NoChange<AttendanceStatus?>(),
+    List<Session>? weeklyDetails,
+    List<Session>? monthlyDetails,
   }) {
     return AttendanceState(
       mode: mode ?? this.mode,
@@ -112,6 +147,8 @@ class AttendanceState {
       statusCounts: statusCounts ?? this.statusCounts,
       filteredSessions: filteredSessions is _NoChange ? this.filteredSessions : filteredSessions as List<Session>?,
       selectedStatus: selectedStatus is _NoChange ? this.selectedStatus : selectedStatus as AttendanceStatus?,
+      weeklyDetails: weeklyDetails ?? this.weeklyDetails,
+      monthlyDetails: monthlyDetails ?? this.monthlyDetails,
     );
   }
 
@@ -126,6 +163,8 @@ class AttendanceState {
     statusCounts: const AttendanceStatusCounts(),
     filteredSessions: null,
     selectedStatus: null,
+    weeklyDetails: const [],
+    monthlyDetails: const [],
   );
 }
 
@@ -157,12 +196,6 @@ class AttendanceController extends ChangeNotifier {
     // final currentAnchor = _dateOnly(state.anchor);
     final termEnd = _dateOnly(term.endDate);
 
-    // NEW: If the current view is already at or past the end date, disable the button.
-    // if (currentAnchor.isAfter(termEnd) || currentAnchor == termEnd) {
-    //   return false;
-    // }
-
-    // Original logic to prevent going past tomorrow, capped by term end
     final now = DateTime.now();
     DateTime boundary = _dateOnly(now).add(const Duration(days: 1));
     if (termEnd.isBefore(boundary)) {
@@ -195,8 +228,6 @@ class AttendanceController extends ChangeNotifier {
       return _dateOnly(state.anchor).isAfter(earliestAllowed);
     }
 
-    // For other views: Keep the original term boundary logic
-    // final currentAnchor = _dateOnly(state.anchor);
     final termStart = _dateOnly(term.startDate);
 
     switch (state.mode) {
@@ -208,29 +239,6 @@ class AttendanceController extends ChangeNotifier {
         return false; // Should not reach here
     }
   }
-
-  // bool get canShiftPrev {
-  //   final term = state.activeTerm;
-  //   if (term == null) return false; // Cannot shift if we don't know the term boundaries.
-  //
-  //   final currentAnchor = _dateOnly(state.anchor);
-  //   final termStart = _dateOnly(term.endDate);
-  //
-  //   // // NEW: If the current view is already at or before the start date, disable the button.
-  //   if (currentAnchor.isBefore(termStart) || currentAnchor == termStart) {
-  //      return false;
-  //    }
-  //
-  //   // Original logic to check against the start boundary
-  //   switch (state.mode) {
-  //     case ViewMode.daily:
-  //       return _dateOnly(state.anchor).isAfter(termStart);
-  //     case ViewMode.weekly:
-  //       return _startOfWeek(state.anchor).isAfter(_startOfWeek(termStart));
-  //     case ViewMode.monthly:
-  //       return _startOfMonth(state.anchor).isAfter(_startOfMonth(termStart));
-  //   }
-  // }
 
   void setMode(ViewMode m) {
     _state = _state.copyWith(
@@ -351,7 +359,6 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-
       // We make a lightweight call to the service if the term isn't already in the state.
       final currentactiveTerm = _state.activeTerm ?? await service.getSessionsForRange(
         userId: userId, role: role, start: DateTime.now(), end: DateTime.now(),
@@ -391,6 +398,11 @@ class AttendanceController extends ChangeNotifier {
       }
 
       List<SubjectDayGroup> dailyGroups = const [];
+      List<SubjectWeekItem> weeklyItems = const [];
+      List<SubjectTotals> monthlyTotals = const [];
+      List<Session> weeklyDetails = const [];
+      List<Session> monthlyDetails = const [];
+
       if (state.mode == ViewMode.daily) {
         final d = _startOfDay(state.anchor);
         final list = sessionsByDate[d] ?? const <Session>[];
@@ -403,49 +415,92 @@ class AttendanceController extends ChangeNotifier {
           return SubjectDayGroup(subjectDisplay: e.key, sessions: e.value);
         }).toList()
           ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-      }
+      } else if (state.mode == ViewMode.weekly) {
+        final bySubject = <String, Map<int, Map<String, Session>>>{};
 
-      List<SubjectWeekItem> weeklyItems = const [];
-      if (state.mode == ViewMode.weekly) {
-        final bySubject = <String, Map<int, Session>>{};
         sessionsByDate.forEach((date, sessions) {
           if (date.weekday > 5) return;
           for (final s in sessions) {
-            bySubject.putIfAbsent(_getSubjectDisplayKey(s), () => {})[date.weekday] = s;
+            final subject = s.subject; // Use just the subject name without room type
+            bySubject
+                .putIfAbsent(subject, () => {})
+                .putIfAbsent(date.weekday, () => {})
+            [s.roomType] = s;
           }
         });
 
         weeklyItems = bySubject.entries.map((entry) {
-          final statuses = List<AttendanceStatus?>.filled(5, null);
-          for (int i = 1; i <= 5; i++) {
-            if (entry.value.containsKey(i)) {
-              statuses[i-1] = entry.value[i]!.status;
+          final sessionStatuses = <int, Map<String, AttendanceStatus>>{};
+          var attendedCount = 0;
+          var totalCount = 0;
+
+          for (final weekdayEntry in entry.value.entries) {
+            final weekday = weekdayEntry.key;
+            for (final roomTypeEntry in weekdayEntry.value.entries) {
+              final session = roomTypeEntry.value;
+
+              // Initialize the weekday map if needed
+              sessionStatuses.putIfAbsent(weekday, () => {});
+
+              // Add the status for this room type
+              sessionStatuses[weekday]![session.roomType] = session.status;
+
+              // Count attended and total
+              if (session.status == AttendanceStatus.present ||
+                  session.status == AttendanceStatus.excused) {
+                attendedCount++;
+              }
+              totalCount++;
             }
           }
-          final attendedCount = statuses.where((s) => s == AttendanceStatus.present || s == AttendanceStatus.excused).length;
+
           return SubjectWeekItem(
             subjectDisplay: entry.key,
+            sessionStatuses: sessionStatuses,
             attended: attendedCount,
-            total: entry.value.length,
-            statuses: statuses,
+            total: totalCount,
           );
         }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-      }
 
-      List<SubjectTotals> monthlyTotals = const [];
-      if (state.mode == ViewMode.monthly) {
-        final map = <String, List<Session>>{};
+        // Store all sessions for detailed view
+        weeklyDetails = sessionsByDate.values.expand((s) => s).toList();
+      } else if (state.mode == ViewMode.monthly) {
+        final map = <String, Map<String, List<Session>>>{};
         sessionsByDate.values.expand((s) => s).forEach((s) {
-          map.putIfAbsent(_getSubjectDisplayKey(s), () => []).add(s);
+          // Group by subject and room type
+          map
+              .putIfAbsent(s.subject, () => {})
+              .putIfAbsent(s.roomType, () => [])
+              .add(s);
         });
-        monthlyTotals = map.entries.map((e) {
-          final attendedCount = e.value.where((s) => s.status == AttendanceStatus.present || s.status == AttendanceStatus.excused).length;
-          return SubjectTotals(
-            subjectDisplay: e.key,
-            attended: attendedCount,
-            total: e.value.length,
-          );
-        }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
+
+        final totals = <SubjectTotals>[];
+        for (final subjectEntry in map.entries) {
+          for (final roomTypeEntry in subjectEntry.value.entries) {
+            final sessions = roomTypeEntry.value;
+            final attendedCount = sessions.where((s) =>
+            s.status == AttendanceStatus.present ||
+                s.status == AttendanceStatus.excused
+            ).length;
+
+            totals.add(SubjectTotals(
+              subjectDisplay: subjectEntry.key,
+              roomType: roomTypeEntry.key,
+              attended: attendedCount,
+              total: sessions.length,
+            ));
+          }
+        }
+
+        monthlyTotals = totals
+          ..sort((a, b) {
+            final subjectCompare = a.subjectDisplay.compareTo(b.subjectDisplay);
+            if (subjectCompare != 0) return subjectCompare;
+            return a.roomType.compareTo(b.roomType);
+          });
+
+        // Store all sessions for detailed view
+        monthlyDetails = sessionsByDate.values.expand((s) => s).toList();
       }
 
       _state = _state.copyWith(
@@ -454,12 +509,232 @@ class AttendanceController extends ChangeNotifier {
         weeklyItems: weeklyItems,
         monthlyTotals: monthlyTotals,
         statusCounts: statusCounts,
+        weeklyDetails: weeklyDetails,
+        monthlyDetails: monthlyDetails,
         loading: false,
         error: null,
       );
     } catch (e) {
       _state = _state.copyWith(loading: false, error: e.toString());
     }
+    notifyListeners();
+  }
+
+  // Add this to AttendanceController
+  Future<void> updatePastAttendance() async {
+    _state = _state.copyWith(loading: true);
+    notifyListeners();
+
+    try {
+      // Get the active term
+      final activeTerm = _state.activeTerm ?? await service.getSessionsForRange(
+        userId: userId, role: role, start: DateTime.now(), end: DateTime.now(),
+      ).then((res) => res.$2);
+
+      if (activeTerm == null) {
+        throw Exception('No active term found');
+      }
+
+      // Get all sessions for the term
+      final termStart = activeTerm.startDate;
+      final now = DateTime.now();
+
+      // Process in smaller chunks to avoid timeout
+      var currentDate = termStart;
+      while (currentDate.isBefore(now)) {
+        final endDate = currentDate.add(const Duration(days: 7));
+        final endDateCapped = endDate.isAfter(now) ? now : endDate;
+
+        await service.getSessionsForRange(
+          userId: userId, role: role, start: currentDate, end: endDateCapped,
+        );
+
+        currentDate = endDate;
+      }
+
+      _state = _state.copyWith(
+        loading: false,
+        error: 'Attendance updated successfully',
+      );
+    } catch (e) {
+      _state = _state.copyWith(
+        loading: false,
+        error: 'Failed to update attendance: ${e.toString()}',
+      );
+    }
+
+    notifyListeners();
+  }
+
+  // Add this method to the AttendanceController class
+  Future<void> updateMissingAttendance() async {
+    _state = _state.copyWith(loading: true);
+    notifyListeners();
+
+    try {
+      // Get the active term if needed
+      final activeTerm = _state.activeTerm ?? await service.getSessionsForRange(
+        userId: userId, role: role, start: DateTime.now(), end: DateTime.now(),
+      ).then((res) => res.$2);
+
+      if (activeTerm == null) {
+        throw Exception('No active term found');
+      }
+
+      final (DateTime start, DateTime end) = switch (state.mode) {
+        ViewMode.daily => (_startOfDay(state.anchor), _endOfDay(state.anchor)),
+        ViewMode.weekly => (_startOfWeek(state.anchor), _endOfWeek(state.anchor)),
+        ViewMode.monthly => (_startOfMonth(state.anchor), _endOfMonth(state.anchor)),
+      };
+
+      // Force refresh to update past sessions
+      final (sessionsByDate, termFromService) = await service.getSessionsForRange(
+        userId: userId, role: role, start: start, end: end,
+      );
+
+      // Calculate attendance status counts
+      var statusCounts = const AttendanceStatusCounts();
+      for (final sessions in sessionsByDate.values) {
+        for (final session in sessions) {
+          switch (session.status) {
+            case AttendanceStatus.present:
+              statusCounts = statusCounts.copyWith(present: statusCounts.present + 1);
+              break;
+            case AttendanceStatus.late:
+              statusCounts = statusCounts.copyWith(late: statusCounts.late + 1);
+              break;
+            case AttendanceStatus.absent:
+              statusCounts = statusCounts.copyWith(absent: statusCounts.absent + 1);
+              break;
+            case AttendanceStatus.excused:
+              statusCounts = statusCounts.copyWith(excused: statusCounts.excused + 1);
+              break;
+            default:
+              break;
+          }
+        }
+      }
+
+      // Process sessions based on view mode (similar to refresh method)
+      List<SubjectDayGroup> dailyGroups = const [];
+      List<SubjectWeekItem> weeklyItems = const [];
+      List<SubjectTotals> monthlyTotals = const [];
+      List<Session> weeklyDetails = const [];
+      List<Session> monthlyDetails = const [];
+
+      if (state.mode == ViewMode.daily) {
+        final d = _startOfDay(state.anchor);
+        final list = sessionsByDate[d] ?? const <Session>[];
+        final map = <String, List<Session>>{};
+        for (final s in list) {
+          map.putIfAbsent(_getSubjectDisplayKey(s), () => []).add(s);
+        }
+        dailyGroups = map.entries.map((e) {
+          e.value.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+          return SubjectDayGroup(subjectDisplay: e.key, sessions: e.value);
+        }).toList()
+          ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
+      } else if (state.mode == ViewMode.weekly) {
+        // Weekly view processing (same as in refresh method)
+        final bySubject = <String, Map<int, Map<String, Session>>>{};
+
+        sessionsByDate.forEach((date, sessions) {
+          if (date.weekday > 5) return;
+          for (final s in sessions) {
+            final subject = s.subject;
+            bySubject
+                .putIfAbsent(subject, () => {})
+                .putIfAbsent(date.weekday, () => {})
+            [s.roomType] = s;
+          }
+        });
+
+        weeklyItems = bySubject.entries.map((entry) {
+          final sessionStatuses = <int, Map<String, AttendanceStatus>>{};
+          var attendedCount = 0;
+          var totalCount = 0;
+
+          for (final weekdayEntry in entry.value.entries) {
+            final weekday = weekdayEntry.key;
+            for (final roomTypeEntry in weekdayEntry.value.entries) {
+              final session = roomTypeEntry.value;
+
+              sessionStatuses.putIfAbsent(weekday, () => {});
+              sessionStatuses[weekday]![session.roomType] = session.status;
+
+              if (session.status == AttendanceStatus.present ||
+                  session.status == AttendanceStatus.excused) {
+                attendedCount++;
+              }
+              totalCount++;
+            }
+          }
+
+          return SubjectWeekItem(
+            subjectDisplay: entry.key,
+            sessionStatuses: sessionStatuses,
+            attended: attendedCount,
+            total: totalCount,
+          );
+        }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
+
+        weeklyDetails = sessionsByDate.values.expand((s) => s).toList();
+      } else if (state.mode == ViewMode.monthly) {
+        // Monthly view processing (same as in refresh method)
+        final map = <String, Map<String, List<Session>>>{};
+        sessionsByDate.values.expand((s) => s).forEach((s) {
+          map
+              .putIfAbsent(s.subject, () => {})
+              .putIfAbsent(s.roomType, () => [])
+              .add(s);
+        });
+
+        final totals = <SubjectTotals>[];
+        for (final subjectEntry in map.entries) {
+          for (final roomTypeEntry in subjectEntry.value.entries) {
+            final sessions = roomTypeEntry.value;
+            final attendedCount = sessions.where((s) =>
+            s.status == AttendanceStatus.present ||
+                s.status == AttendanceStatus.excused
+            ).length;
+
+            totals.add(SubjectTotals(
+              subjectDisplay: subjectEntry.key,
+              roomType: roomTypeEntry.key,
+              attended: attendedCount,
+              total: sessions.length,
+            ));
+          }
+        }
+
+        monthlyTotals = totals
+          ..sort((a, b) {
+            final subjectCompare = a.subjectDisplay.compareTo(b.subjectDisplay);
+            if (subjectCompare != 0) return subjectCompare;
+            return a.roomType.compareTo(b.roomType);
+          });
+
+        monthlyDetails = sessionsByDate.values.expand((s) => s).toList();
+      }
+
+      _state = _state.copyWith(
+        activeTerm: termFromService ?? activeTerm,
+        dailyGroups: dailyGroups,
+        weeklyItems: weeklyItems,
+        monthlyTotals: monthlyTotals,
+        statusCounts: statusCounts,
+        weeklyDetails: weeklyDetails,
+        monthlyDetails: monthlyDetails,
+        loading: false,
+        error: 'Past session statuses updated successfully',
+      );
+    } catch (e) {
+      _state = _state.copyWith(
+        loading: false,
+        error: 'Failed to update past sessions: ${e.toString()}',
+      );
+    }
+
     notifyListeners();
   }
 

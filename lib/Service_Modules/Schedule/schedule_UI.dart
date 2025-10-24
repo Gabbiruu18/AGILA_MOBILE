@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-// Import the shimmer package
+import 'package:intl/intl.dart';
+import 'package:project_agila/Service_Modules/Schedule/schedule_pdf_export.dart';
 import 'schedule_service.dart';
 import 'schedule_controller.dart';
-// ============================ HELPERS (Copied for Independence) ============================
+
+// ============================ HELPERS ============================
 
 String _d2(int n) => n.toString().padLeft(2, '0');
 String fmtTime(int minutes) {
@@ -15,6 +17,10 @@ String fmtTime(int minutes) {
 }
 String fmtRange(int startMinutes, int endMinutes) => "${fmtTime(startMinutes)}–${fmtTime(endMinutes)}";
 
+String formatDateTime(DateTime? dateTime) {
+  if (dateTime == null) return 'N/A';
+  return DateFormat('MMM dd, yyyy hh:mm a').format(dateTime);
+}
 
 BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
   final cs = Theme.of(context).colorScheme;
@@ -25,32 +31,100 @@ BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
   );
 }
 
-// UPDATED: Now uses the AttendanceStatus enum
-Color statusBg(AttendanceStatus? st) {
-  if (st == null) return Colors.grey.shade200;
+Color statusBg(AttendanceStatus st) {
   switch (st) {
     case AttendanceStatus.scheduled: return const Color(0xFFDCECFF); // Blue for scheduled
-    case AttendanceStatus.present:
-    case AttendanceStatus.excused: return const Color(0xFFDCF5E7);
-    case AttendanceStatus.late:    return const Color(0xFFFFF1CC);
-    case AttendanceStatus.absent:  return const Color(0xFFFFE0E0);
+    case AttendanceStatus.present:   return const Color(0xFFDCF5E7);
+    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF); // Light blue for excused
+    case AttendanceStatus.late:      return const Color(0xFFFFF1CC);
+    case AttendanceStatus.absent:    return const Color(0xFFFFE0E0);
+    case AttendanceStatus.none:    return const Color(0xFFE0E0E0);
+
+
   }
 }
-Color statusFg(AttendanceStatus? st) {
-  if (st == null) return Colors.grey.shade600;
+Color statusFg(AttendanceStatus st) {
   switch (st) {
     case AttendanceStatus.scheduled: return const Color(0xFF0058CE);
-    case AttendanceStatus.present:
-    case AttendanceStatus.excused: return const Color(0xFF1E7E34);
-    case AttendanceStatus.late:    return const Color(0xFF9A6B00);
-    case AttendanceStatus.absent:  return const Color(0xFFB3261E);
+    case AttendanceStatus.present:   return const Color(0xFF1E7E34);
+    case AttendanceStatus.excused:   return const Color(0xFF0096C7); // Blue for excused
+    case AttendanceStatus.late:      return const Color(0xFF9A6B00);
+    case AttendanceStatus.absent:    return const Color(0xFFB3261E);
+    case AttendanceStatus.none:      return const Color(0xFF616161);
+
   }
 }
-String statusText(AttendanceStatus? st) {
-  if (st == null) return "N/A";
+String statusText(AttendanceStatus st) {
+  if (st == AttendanceStatus.none) return "None";
   return st.name[0].toUpperCase() + st.name.substring(1);
 }
 
+class StatusFilterDialog extends StatelessWidget {
+  final List<Session> sessions;
+  final VoidCallback onClose;
+  final AttendanceStatus status;
+
+  const StatusFilterDialog({
+    super.key,
+    required this.sessions,
+    required this.onClose,
+    required this.status,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "${statusText(status)} Classes",
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: onClose,
+                ),
+              ],
+            ),
+            const Divider(),
+            if (sessions.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Center(child: Text("No classes with this status")),
+              )
+            else
+              SizedBox(
+                height: 300,
+                child: ListView.builder(
+                  itemCount: sessions.length,
+                  itemBuilder: (context, index) {
+                    final session = sessions[index];
+                    return ListTile(
+                      title: Text(session.subject),
+                      subtitle: Text("${session.section} • ${fmtRange(session.startMinutes, session.endMinutes)}"),
+                      leading: CircleAvatar(
+                        backgroundColor: statusBg(status),
+                        foregroundColor: statusFg(status),
+                        child: const Icon(Icons.class_),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
 
 class EnhancedPeriodSwitcher extends StatelessWidget {
   final String label;
@@ -58,7 +132,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onLabelTap;
   final VoidCallback onTodayTap;
-  // NEW: Pass the canShiftPrev boolean
   final bool showPrev;
   final bool showNext;
   final bool showTodayButton;
@@ -70,7 +143,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
     required this.onNext,
     required this.onLabelTap,
     required this.onTodayTap,
-    // NEW
     required this.showPrev,
     required this.showNext,
     required this.showTodayButton,
@@ -142,45 +214,74 @@ class StatCard extends StatelessWidget {
   final int value;
   final IconData icon;
   final Color tint;
-  const StatCard({super.key, required this.label, required this.value, required this.icon, required this.tint});
+  final VoidCallback? onTap;
+
+  const StatCard({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.tint,
+    this.onTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      width: 110,
-      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 12),
-      decoration: BoxDecoration(
-        color: cs.surface,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-            color: cs.onSurface.withOpacity(0.06),
-          ),
-        ],
-        border: Border.all(color: tint.withOpacity(0.2)),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+        decoration: BoxDecoration(
+          color: cs.surface,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+              color: cs.onSurface.withOpacity(0.06),
+            ),
+          ],
+          border: Border.all(color: tint.withOpacity(0.2)),
+        ),
+        child: Row(
+          children: [
+            // Left side with icon and label
+            Row(
+              children: [
+                CircleAvatar(
+                    radius: 14,
+                    backgroundColor: tint.withOpacity(0.15),
+                    child: Icon(icon, size: 16, color: tint)
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+
+            // Expanded space to push the number to the right
+            const Spacer(),
+
+            // Right side with the count number
+            Text(
+              "$value",
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.w800,
+                color: tint,
+              ),
+            ),
+          ],
+        ),
       ),
-      child: Column(children: [
-        CircleAvatar(radius: 16, backgroundColor: tint.withOpacity(0.15), child: Icon(icon, size: 18, color: tint)),
-        const SizedBox(height: 8),
-        Text(
-          "$value",
-          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w900),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ]),
     );
   }
 }
-
 
 class LinedTitle extends StatelessWidget {
   final String text;
@@ -198,6 +299,7 @@ class LinedTitle extends StatelessWidget {
     ]);
   }
 }
+
 class ThinLine extends StatelessWidget {
   const ThinLine({super.key});
   @override
@@ -233,8 +335,8 @@ class DailyListScheduleLike extends StatelessWidget {
           section: session.section,
           room: session.room,
           timeLabel: fmtRange(session.startMinutes, session.endMinutes),
-          // UPDATED: Pass the status enum directly.
           status: session.status,
+          source: session.source,
           accentColor: _subjectAccent(session.subject),
           onViewDetails: () => onViewDetails(session),
         );
@@ -245,70 +347,249 @@ class DailyListScheduleLike extends StatelessWidget {
 
 class WeeklyList extends StatelessWidget {
   final List<SubjectWeekItem> items;
-  const WeeklyList({super.key, required this.items});
+  final void Function(SubjectWeekItem item)? onItemTap;
+  final void Function(SubjectWeekItem item, String roomType, int weekday)? onStatusTap;
+
+  const WeeklyList({
+    super.key,
+    required this.items,
+    this.onItemTap,
+    this.onStatusTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this week.")));
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: cardDeco(context),
+        child: const Center(child: Text("No subjects scheduled this week.")),
+      );
     }
+
     return ListView.builder(
-        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-        itemBuilder: (context, i) {
-          final it = items[i];
-          const days = ["M", "T", "W", "Th", "F"];
-          return Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDeco(context),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800)),
-                const SizedBox(height: 10),
-                Row(
-                  children: List.generate(5, (i) {
-                    final st = it.statuses[i];
-                    return Container(
-                      margin: const EdgeInsets.only(right: 6),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      // UPDATED: Use the new helper functions.
-                      decoration: BoxDecoration(color: statusBg(st), borderRadius: BorderRadius.circular(999)),
-                      child: Text(days[i], style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, fontWeight: FontWeight.w700, color: statusFg(st))),
-                    );
-                  }),
+      itemCount: items.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (context, i) {
+        final item = items[i];
+        const days = ["M", "T", "W", "Th", "F", "S"];
+        final roomTypes = item.roomTypes;
+
+        return GestureDetector(
+          onTap: onItemTap != null ? () => onItemTap!(item) : null,
+          child: Container(
+            margin: const EdgeInsets.symmetric(vertical: 6),
+            padding: const EdgeInsets.all(16),
+            decoration: cardDeco(context),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  item.subjectDisplay,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
-              ]));
-        });
+                const SizedBox(height: 10),
+
+                // Add a summary of attendance
+                Text(
+                  "Attendance: ${item.attended}/${item.total}",
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 10),
+
+                // Create a row for each room type
+                ...roomTypes.map((roomType) {
+                  final statuses = item.getStatusesForRoomType(roomType);
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: Row(
+                      children: [
+                        // Room type label
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            roomType,
+                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+
+                        // Status indicators for each day
+                        ...List.generate(6, (dayIndex) {
+                          // Safely get the status, defaulting to null if out of bounds.
+                          final status = (dayIndex < statuses.length) ? statuses[dayIndex] : null;
+                          final weekday = dayIndex + 1;
+
+                          // If status is null, it means there's no session on this day for this room type.
+                          if (status == null) {
+                            return Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade200, // A neutral background
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                days[dayIndex],
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.grey.shade500, // A dimmer text color
+                                ),
+                              ),
+                            );
+                          }
+
+                          return GestureDetector(
+                            onTap: onStatusTap != null
+                                ? () => onStatusTap!(item, roomType, weekday)
+                                : null,
+                            child: Container(
+                              margin: const EdgeInsets.only(right: 6),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: statusBg(status),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: Text(
+                                days[dayIndex],
+                                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: statusFg(status),
+                                ),
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 
 class MonthlyList extends StatelessWidget {
   final List<SubjectTotals> items;
-  const MonthlyList({super.key, required this.items});
+  final void Function(SubjectTotals item)? onItemTap;
+
+  const MonthlyList({
+    super.key,
+    required this.items,
+    this.onItemTap,
+  });
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+
     if (items.isEmpty) {
-      return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No subjects scheduled this month.")));
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: cardDeco(context),
+        child: const Center(child: Text("No subjects scheduled this month.")),
+      );
     }
+
+    // Group items by subject
+    final bySubject = <String, List<SubjectTotals>>{};
+    for (final item in items) {
+      bySubject.putIfAbsent(item.subjectDisplay, () => []).add(item);
+    }
+
     return ListView.builder(
-        itemCount: items.length, shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-        itemBuilder: (context, i) {
-          final it = items[i];
-          final pct = it.total == 0 ? 0.0 : it.attended / it.total;
-          return Container(
-              margin: const EdgeInsets.symmetric(vertical: 6),
-              padding: const EdgeInsets.all(16),
-              decoration: cardDeco(context),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  Expanded(child: Text(it.subjectDisplay, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800))),
-                  Text("${it.attended}/${it.total}", style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700)),
-                ]),
-                const SizedBox(height: 10),
-                ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(minHeight: 8, value: pct, backgroundColor: cs.surfaceContainerHighest, valueColor: AlwaysStoppedAnimation(cs.primary))),
-              ]));
-        });
+      itemCount: bySubject.length,
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemBuilder: (context, i) {
+        final subjectName = bySubject.keys.elementAt(i);
+        final subjectItems = bySubject[subjectName]!;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+              child: Text(
+                subjectName,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: cs.primary,
+                ),
+              ),
+            ),
+            ...subjectItems.map((item) {
+              final pct = item.total == 0 ? 0.0 : item.attended / item.total;
+
+              return GestureDetector(
+                onTap: onItemTap != null ? () => onItemTap!(item) : null,
+                child: Container(
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(16),
+                  decoration: cardDeco(context),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: cs.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              item.roomType,
+                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: cs.primary,
+                              ),
+                            ),
+                          ),
+                          const Spacer(),
+                          Text(
+                            "${item.attended}/${item.total}",
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          minHeight: 8,
+                          value: pct,
+                          backgroundColor: cs.surfaceContainerHighest,
+                          valueColor: AlwaysStoppedAnimation(cs.primary),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+        );
+      },
+    );
   }
 }
 
@@ -318,11 +599,11 @@ Color _subjectAccent(String subject) {
 }
 
 class TodayScheduleCard extends StatelessWidget {
-  // UPDATED: Simplified parameters.
   final String subject, roomType, section, room, timeLabel;
   final AttendanceStatus status;
   final Color accentColor;
   final VoidCallback? onViewDetails;
+  final String? source;
 
   const TodayScheduleCard({
     super.key,
@@ -334,12 +615,12 @@ class TodayScheduleCard extends StatelessWidget {
     required this.accentColor,
     this.onViewDetails,
     required this.roomType,
+    this.source,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // UPDATED: Derive label and colors from the status enum.
     final sLabel = statusText(status);
     final sBg = statusBg(status);
     final sFg = statusFg(status);
@@ -361,7 +642,6 @@ class TodayScheduleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      // UPDATED: Display subject name and room type
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,75 +676,208 @@ class TodayScheduleCard extends StatelessWidget {
   }
 }
 
-// ============================ PANEL UI WIDGETS (Standard Version) ============================
-
 class SessionDetailsPanel extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
+  final DateTime selectedDate;
+  final ActiveTerm? activeTerm; // Add this parameter
 
-  const SessionDetailsPanel({super.key, required this.session, required this.fetchStudents, required this.fetchInstructor});
+  const SessionDetailsPanel({
+    super.key,
+    required this.session,
+    required this.fetchStudents,
+    required this.fetchInstructor,
+    required this.selectedDate,
+    this.activeTerm, // Add this parameter
+  });
 
   @override
   Widget build(BuildContext context) {
     return SlidingPanel(
-        title: session.subject,
-        child: _SessionDetailsContent(
-          session: session,
-          fetchStudents: fetchStudents,
-          fetchInstructor: fetchInstructor,
-        )
+      title: session.subject,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Export PDF button with instructor details
+          FutureBuilder<InstructorDetails?>(
+            future: fetchInstructor(),
+            builder: (context, instructorSnapshot) {
+              return FutureBuilder<List<SectionStudent>>(
+                future: fetchStudents(),
+                builder: (context, studentsSnapshot) {
+                  if (studentsSnapshot.connectionState == ConnectionState.waiting ||
+                      instructorSnapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  return ExportAttendancePDF(
+                    schedule: session,
+                    teacher: instructorSnapshot.data,
+                    employeeNumber: instructorSnapshot.data?.employeeNumber,
+                    students: studentsSnapshot.data ?? [],
+                    dateStr: DateFormat('yyyy-MM-dd').format(selectedDate),
+                    disabled: !studentsSnapshot.hasData,
+                    activeTerm: activeTerm,
+                  );
+                },
+              );
+            },
+          ),
+
+          const SizedBox(height: 16),
+
+          // Rest of the content
+          _SessionDetailsContent(
+            session: session,
+            fetchStudents: fetchStudents,
+            fetchInstructor: fetchInstructor,
+            selectedDate: selectedDate,
+          ),
+        ],
+      ),
     );
   }
 }
-
 
 class _SessionDetailsContent extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
+  final DateTime selectedDate; // Add this field
 
-  const _SessionDetailsContent({required this.session, required this.fetchStudents, required this.fetchInstructor});
+  const _SessionDetailsContent({
+    required this.session,
+    required this.fetchStudents,
+    required this.fetchInstructor,
+    required this.selectedDate, // Add this parameter
+  });
 
   @override
   Widget build(BuildContext context) {
+    // Get attendance status color and label
+    final sBg = statusBg(session.status);
+    final sFg = statusFg(session.status);
+    final sLabel = statusText(session.status);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(session.section, style: Theme.of(context).textTheme.titleSmall),
         const Divider(height: 24),
+
+        // Special message for "No attendance session created" case
+        if (session.source == "No attendance session created")
+          Container(
+            padding: const EdgeInsets.all(12),
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.orange.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.orange),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.warning_amber, color: Colors.orange),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    "No attendance session was created for this class.",
+                    style: TextStyle(color: Colors.orange[800]),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+        // Attendance status chip
+        if (session.status != AttendanceStatus.scheduled) ...[
+          Row(
+            children: [
+              const Text("Attendance Status:", style: TextStyle(fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: sBg,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      session.status == AttendanceStatus.present ? Icons.check_circle :
+                      session.status == AttendanceStatus.late ? Icons.schedule :
+                      session.status == AttendanceStatus.excused ? Icons.event_available :
+                      session.status == AttendanceStatus.none ? Icons.cancel_outlined:
+                      Icons.cancel,
+                      color: sFg,
+                      size: 16,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      sLabel,
+                      style: TextStyle(color: sFg, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+
+          // Attendance details
+          if (session.source != null && session.source != "No attendance session created")
+            _kv(context, Icons.source, 'Source', session.source!),
+          if (session.firstSeen != null)
+            _kv(context, Icons.login, 'First Seen', formatDateTime(session.firstSeen)),
+          if (session.lastSeen != null)
+            _kv(context, Icons.logout, 'Last Seen', formatDateTime(session.lastSeen)),
+          if (session.updatedAt != null)
+            _kv(context, Icons.update, 'Updated At', formatDateTime(session.updatedAt)),
+          if (session.academicStatus != null)
+            _kv(context, Icons.school, 'Academic Status', session.academicStatus!),
+
+          const Divider(height: 24),
+        ],
+
         _kv(context, Icons.schedule, 'Time', fmtRange(session.startMinutes, session.endMinutes)),
         _kv(context, Icons.meeting_room_outlined, 'Room', session.room),
-        if (session.instructorName != null) _kv(context, Icons.person_outline, 'Instructor', session.instructorName!),
+
         const Divider(height: 24),
-        DefaultTabController(
-          length: 2,
+
+        // Replace TabBar with just the Classmates section
+        SizedBox(
+          height: 300,
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const TabBar(tabs: [Tab(text: "Instructor"), Tab(text: "Classmates")]),
-              const SizedBox(height: 16),
-              SizedBox(
-                height: 300,
-                child: TabBarView(children: [
-                  FutureBuilder<InstructorDetails?>(
-                    future: fetchInstructor(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) return const LoadingContent();
-                      if (snapshot.hasError || snapshot.data == null) return const ErrorContent(error: "Instructor details not found.");
-                      return _InstructorDetailsContent(details: snapshot.data!);
-                    },
-                  ),
-                  FutureBuilder<List<SectionStudent>>(
+              Text(
+                "Class list",
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                  child: FutureBuilder<List<SectionStudent>>(
                     future: fetchStudents(),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) return const LoadingContent();
-                      if (snapshot.hasError || snapshot.data == null || snapshot.data!.isEmpty) return const ErrorContent(error: "No classmates found.");
-                      return _SectionRosterContent(students: snapshot.data!);
+                      if (snapshot.hasError || snapshot.data == null || snapshot.data!.isEmpty) {
+                        return const ErrorContent(error: "No Class list found.");
+                      }
+
+                      // Format the selected date to use for attendance lookup
+                      final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
+
+                      // Pass the formatted date string to the section roster content
+                      return _SectionRosterContent(
+                        students: snapshot.data!,
+                        session: session,
+                        dateStr: dateStr,
+                      );
                     },
-                  ),
-                ]),
+                  )
               ),
             ],
           ),
@@ -477,7 +890,14 @@ class _SessionDetailsContent extends StatelessWidget {
 class SlidingPanel extends StatelessWidget {
   final String title;
   final Widget child;
-  const SlidingPanel({super.key, required this.title, required this.child});
+  final List<Widget>? actions;
+
+  const SlidingPanel({
+    super.key,
+    required this.title,
+    required this.child,
+    this.actions,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -500,9 +920,17 @@ class SlidingPanel extends StatelessWidget {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Text(
-              title,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                if (actions != null) ...actions!,
+              ],
             ),
           ),
           const SizedBox(height: 8),
@@ -550,18 +978,139 @@ class _InstructorDetailsContent extends StatelessWidget {
   }
 }
 
-class _SectionRosterContent extends StatelessWidget {
+class _SectionRosterContent extends StatefulWidget {
   final List<SectionStudent> students;
-  const _SectionRosterContent({required this.students});
+  final Session session;
+  final String dateStr; // Change this to String type
+
+  const _SectionRosterContent({
+    required this.students,
+    required this.session,
+    required this.dateStr, // Update parameter type
+  });
+
+  @override
+  State<_SectionRosterContent> createState() => _SectionRosterContentState();
+}
+
+class _SectionRosterContentState extends State<_SectionRosterContent> {
+  List<StudentAttendanceRecord>? attendanceRecords;
+  bool isLoading = true;
+  String? error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAttendance();
+  }
+
+  Future<void> _loadAttendance() async {
+    try {
+      // Use the dateStr provided from parent widget
+      // This contains the selected date from the UI, not today's date
+      final actualDateStr = widget.dateStr;
+
+      debugPrint('[ATTENDANCE_UI] Loading attendance for date: $actualDateStr');
+
+      // Use dependency injection to get the service
+      final service = FirestoreScheduleService();
+      final records = await service.fetchStudentAttendanceForSession(
+        scheduleId: widget.session.id,
+        dateStr: actualDateStr, // Use the provided date string
+      );
+
+      if (mounted) {
+        setState(() {
+          attendanceRecords = records;
+          isLoading = false;
+          if (records.isEmpty) {
+            debugPrint('[ATTENDANCE_UI] No attendance records found for date: $actualDateStr');
+          } else {
+            debugPrint('[ATTENDANCE_UI] Found ${records.length} attendance records');
+          }
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          error = e.toString();
+          isLoading = false;
+          debugPrint('[ATTENDANCE_UI] Error loading attendance: $e');
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (error != null) {
+      return Center(child: Text("Error loading attendance: $error"));
+    }
+
+    // Create a map for quick lookups of attendance by student ID
+    final attendanceMap = <String, StudentAttendanceRecord>{};
+    if (attendanceRecords != null) {
+      for (final record in attendanceRecords!) {
+        attendanceMap[record.uid] = record;
+      }
+    }
+
     return ListView.builder(
-      itemCount: students.length,
+      itemCount: widget.students.length,
       itemBuilder: (context, index) {
-        final student = students[index];
+        final student = widget.students[index];
+        // Look up attendance for this student
+        final attendanceRecord = attendanceMap[student.uid];
+        final hasAttendance = attendanceRecord != null;
+
         return ListTile(
-          leading: CircleAvatar(backgroundImage: student.photoURL != null ? NetworkImage(student.photoURL!) : null, child: student.photoURL == null ? const Icon(Icons.person) : null),
-          title: Text(student.name),
+          leading: CircleAvatar(
+            backgroundImage: student.photoURL != null ? NetworkImage(student.photoURL!) : null,
+            child: student.photoURL == null ? const Icon(Icons.person) : null,
+          ),
+          title: Row(
+            children: [
+              Expanded(child: Text(student.name)),
+              if (hasAttendance)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: statusBg(attendanceRecord.status),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        attendanceRecord.status == AttendanceStatus.present ? Icons.check_circle :
+                        attendanceRecord.status == AttendanceStatus.late ? Icons.schedule :
+                        attendanceRecord.status == AttendanceStatus.excused ? Icons.event_available :
+                        attendanceRecord.status == AttendanceStatus.absent ? Icons.cancel :
+                        Icons.access_time,
+                        color: statusFg(attendanceRecord.status),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        statusText(attendanceRecord.status),
+                        style: TextStyle(
+                          color: statusFg(attendanceRecord.status),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          subtitle: hasAttendance && attendanceRecord.firstSeen != null
+              ? Text("Time in: ${formatDateTime(attendanceRecord.firstSeen)}")
+              : null,
         );
       },
     );
@@ -579,7 +1128,6 @@ Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
 );
 
 // ============================ SKELETON WIDGETS ============================
-// NEW: All of the following widgets are for the loading state.
 
 class _SkeletonBox extends StatelessWidget {
   final double? width;
@@ -587,12 +1135,11 @@ class _SkeletonBox extends StatelessWidget {
   const _SkeletonBox({this.width, required this.height});
   @override
   Widget build(BuildContext context) {
-    // The color is now INSIDE the BoxDecoration, which is the correct way.
     return Container(
       width: width,
       height: height,
       decoration: BoxDecoration(
-        color: Colors.black,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(8),
       ),
     );
