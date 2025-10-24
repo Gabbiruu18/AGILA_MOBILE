@@ -4,22 +4,46 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 // ==========================================================================================
-// HELPER FUNCTION: Reusable function to get a user's data from any role.
-// This is the only part that needs to check the notification setting.
+// HELPER FUNCTION: Saves a notification to a user's subcollection. (No changes needed here)
+// ==========================================================================================
+async function saveNotificationToSubcollection(uid, role, title, message) {
+  if (!uid || !role) {
+    console.log("Cannot save notification without UID and role.");
+    return;
+  }
+  try {
+    const notificationRef = admin.firestore()
+      .collection("users").doc(role)
+      .collection("accounts").doc(uid)
+      .collection("notifications");
+
+    await notificationRef.add({
+      title: title,
+      message: message,
+      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      read: false,
+    });
+    console.log(`Notification for ${uid} (role: ${role}) saved to subcollection.`);
+  } catch (error) {
+    console.error("Error saving notification to subcollection:", error);
+  }
+}
+
+
+// ==========================================================================================
+// HELPER FUNCTION: Reusable function to get a user's data from any role. (No changes needed here)
 // ==========================================================================================
 async function getUserData(uid) {
   const rolesToSearch = ["student", "teacher", "program_head"];
   for (const role of rolesToSearch) {
     const userDocRef = admin.firestore().collection("users").doc(role).collection("accounts").doc(uid);
     const userDoc = await userDocRef.get();
-    
+
     if (userDoc.exists) {
       console.log(`User ${uid} found with role '${role}'.`);
-      // Return the entire data object. This is useful for checking multiple fields.
-      return userDoc.data();
+      return { data: userDoc.data(), role: role };
     }
   }
-  // This will run only if the user was not found in any of the roles.
   console.log(`Could not find a user with UID '${uid}' in any role.`);
   return null;
 }
@@ -33,44 +57,34 @@ exports.sendNewRequestNotification = onDocumentCreated("users/{userRole}/account
   const requesterName = newRequestData.requesterName || "Someone";
   const receiverUid = newRequestData.toStudentId || newRequestData.toTeacherId || newRequestData.toProgramHeadId;
 
-  if (!receiverUid) {
-    console.log("No valid 'to{Role}Id' field found. Exiting.");
+  if (!receiverUid) return;
+
+  const receiverInfo = await getUserData(receiverUid);
+
+  // Stop only if user doesn't exist or has explicitly disabled notifications
+  if (!receiverInfo || receiverInfo.data.notificationsEnabled === false) {
+    console.log(`Notifications will not be processed for user ${receiverUid} (user not found or notifications disabled).`);
     return;
   }
-  
-  console.log(`Function triggered for new request. Receiver target: ${receiverUid}`);
 
-  // --- MODIFIED: Use the helper function ---
-  const receiverData = await getUserData(receiverUid);
+  const title = "New Request Received";
+  const body = `${requesterName} has sent you a new request.`;
 
-  // --- THIS IS THE NEW LOGIC BLOCK ---
-  // 1. Check if user exists at all.
-  if (!receiverData) {
-    // The helper function already logs the reason.
-    return;
-  }
-  // 2. Check the notification preference. Defaults to ON if the field is missing.
-  if (receiverData.notificationsEnabled === false) {
-    console.log(`User ${receiverUid} has notifications disabled. Not sending.`);
-    return;
-  }
-  // 3. Check for the FCM token.
-  if (!receiverData.fcmToken) {
-    console.log(`User ${receiverUid} has no FCM token. Not sending.`);
-    return;
-  }
-  // --- END NEW LOGIC BLOCK ---
+  // --- NEW LOGIC: Save first, then attempt to send ---
+  // 1. Save the notification to the database.
+  await saveNotificationToSubcollection(receiverUid, receiverInfo.role, title, body);
 
-  const payload = {
-    notification: { title: "New Request Received", body: `${requesterName} has sent you a new request.` },
-    token: receiverData.fcmToken, // Use the token from the data we fetched
-  };
-
-  try {
-    await admin.messaging().send(payload);
-    console.log("Successfully sent 'new request' message.");
-  } catch (error) {
-    console.error("Error sending 'new request' message:", error);
+  // 2. Check for FCM token and send push notification if available.
+  if (receiverInfo.data.fcmToken) {
+    const payload = { notification: { title, body }, token: receiverInfo.data.fcmToken };
+    try {
+      await admin.messaging().send(payload);
+      console.log("Successfully sent 'new request' push notification.");
+    } catch (error) {
+      console.error("Error sending 'new request' push notification:", error);
+    }
+  } else {
+    console.log(`User ${receiverUid} has no FCM token. Skipped sending push notification.`);
   }
 });
 
@@ -82,47 +96,113 @@ exports.sendRequestStatusNotification = onDocumentUpdated("users/{userRole}/acco
   const newValue = event.data.after.data();
   const previousValue = event.data.before.data();
 
-  if (newValue.status === previousValue.status || (newValue.status !== "Approved" && newValue.status !== "Rejected")) {
-    return;
-  }
-  
-  console.log("Function triggered for request status update.");
+  if (newValue.status === previousValue.status || (newValue.status !== "Approved" && newValue.status !== "Rejected")) return;
+
   const requesterUid = newValue.fromStudentId || newValue.fromTeacherId || newValue.fromProgramHeadId;
 
-  if (!requesterUid) {
-    console.log("No valid 'from{Role}Id' field found. Exiting.");
+  if (!requesterUid) return;
+
+  const requesterInfo = await getUserData(requesterUid);
+
+  if (!requesterInfo || requesterInfo.data.notificationsEnabled === false) {
+    console.log(`Notifications will not be processed for user ${requesterUid} (user not found or notifications disabled).`);
     return;
   }
 
-  // --- MODIFIED: Use the helper function ---
-  const requesterData = await getUserData(requesterUid);
+  const title = `Request ${newValue.status}`;
+  const body = `Your request has been ${newValue.status}.`;
 
-  // --- THIS IS THE NEW LOGIC BLOCK (Identical to Function 1) ---
-  // 1. Check if user exists at all.
-  if (!requesterData) {
+  // --- NEW LOGIC: Save first, then attempt to send ---
+  await saveNotificationToSubcollection(requesterUid, requesterInfo.role, title, body);
+
+  if (requesterInfo.data.fcmToken) {
+    const payload = { notification: { title, body }, token: requesterInfo.data.fcmToken };
+    try {
+      await admin.messaging().send(payload);
+      console.log("Successfully sent 'status update' push notification.");
+    } catch (error) {
+      console.error("Error sending 'status update' push notification:", error);
+    }
+  } else {
+    console.log(`User ${requesterUid} has no FCM token. Skipped sending push notification.`);
+  }
+});
+
+
+// ==========================================================================================
+// FUNCTION FOR STUDENT ATTENDANCE NOTIFICATIONS
+// ==========================================================================================
+exports.sendStudentAttendanceRecordedNotification = onDocumentCreated("attendance_sessions/{sessionId}/students/{studentId}", async (event) => {
+  const studentId = event.params.studentId;
+  const attendanceData = event.data.data();
+  const attendanceStatus = attendanceData.status || "marked";
+
+  const sessionDoc = await admin.firestore().collection("attendance_sessions").doc(event.params.sessionId).get();
+  const subjectName = sessionDoc.data()?.subjectName || "a class";
+
+  const studentInfo = await getUserData(studentId);
+
+  if (!studentInfo || studentInfo.data.notificationsEnabled === false) {
+    console.log(`Notifications will not be processed for user ${studentId} (user not found or notifications disabled).`);
     return;
   }
-  // 2. Check the notification preference.
-  if (requesterData.notificationsEnabled === false) {
-    console.log(`User ${requesterUid} has notifications disabled. Not sending.`);
+
+  const title = "Attendance Recorded";
+  const body = `Your attendance for ${subjectName} was recorded as '${attendanceStatus}'.`;
+
+  // --- NEW LOGIC: Save first, then attempt to send ---
+  await saveNotificationToSubcollection(studentId, studentInfo.role, title, body);
+
+  if (studentInfo.data.fcmToken) {
+    const payload = { notification: { title, body }, token: studentInfo.data.fcmToken };
+    try {
+      await admin.messaging().send(payload);
+      console.log("Successfully sent 'student attendance' push notification.");
+    } catch (error) {
+      console.error("Error sending 'student attendance' push notification:", error);
+    }
+  } else {
+    console.log(`User ${studentId} has no FCM token. Skipped sending push notification.`);
+  }
+});
+
+
+// ==========================================================================================
+// FUNCTION FOR TEACHER ATTENDANCE NOTIFICATIONS
+// ==========================================================================================
+exports.sendTeacherAttendanceRecordedNotification = onDocumentCreated("attendance_sessions/{sessionId}/instructor/main", async (event) => {
+  const teacherAttendanceData = event.data.data();
+  const teacherId = teacherAttendanceData.instructorId;
+  const attendanceStatus = teacherAttendanceData.status || "marked";
+
+  if (!teacherId) return;
+
+  const sessionDoc = await admin.firestore().collection("attendance_sessions").doc(event.params.sessionId).get();
+  const subjectName = sessionDoc.data()?.subjectName || "a class";
+
+  const teacherInfo = await getUserData(teacherId);
+
+  if (!teacherInfo || teacherInfo.data.notificationsEnabled === false) {
+    console.log(`Notifications will not be processed for user ${teacherId} (user not found or notifications disabled).`);
     return;
   }
-  // 3. Check for the FCM token.
-  if (!requesterData.fcmToken) {
-    console.log(`User ${requesterUid} has no FCM token. Not sending.`);
-    return;
-  }
-  // --- END NEW LOGIC BLOCK ---
 
-  const payload = {
-    notification: { title: `Request ${newValue.status.charAt(0).toUpperCase() + newValue.status.slice(1)}`, body: `Your request has been ${newValue.status}.` },
-    token: requesterData.fcmToken, // Use the token from the data we fetched
-  };
+  const title = "Attendance Recorded";
+  const body = `Your attendance for your class, ${subjectName}, was recorded as '${attendanceStatus}'.`;
 
-  try {
-    await admin.messaging().send(payload);
-    console.log("Successfully sent 'status update' message.");
-  } catch (error) {
-    console.error("Error sending message:", error);
+  // --- NEW LOGIC: Save first, then attempt to send ---
+  await saveNotificationToSubcollection(teacherId, teacherInfo.role, title, body);
+
+  if (teacherInfo.data.fcmToken) {
+    const payload = { notification: { title, body }, token: teacherInfo.data.fcmToken };
+    try {
+      await admin.messaging().send(payload);
+
+      console.log("Successfully sent 'teacher attendance' push notification.");
+    } catch (error) {
+      console.error("Error sending 'teacher attendance' push notification:", error);
+    }
+  } else {
+    console.log(`User ${teacherId} has no FCM token. Skipped sending push notification.`);
   }
 });

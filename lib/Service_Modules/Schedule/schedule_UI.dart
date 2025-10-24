@@ -960,24 +960,6 @@ class ErrorContent extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(child: Padding(padding: const EdgeInsets.all(32.0), child: Column(mainAxisSize: MainAxisSize.min, children: [const Icon(Icons.error_outline, color: Colors.red, size: 40), const SizedBox(height: 16), Text('Failed to load details.\n$error', textAlign: TextAlign.center)])));
 }
-
-class _InstructorDetailsContent extends StatelessWidget {
-  final InstructorDetails details;
-  const _InstructorDetailsContent({required this.details});
-  @override
-  Widget build(BuildContext context) {
-    return Column(children: [
-      CircleAvatar(radius: 40, backgroundImage: details.photoURL != null ? NetworkImage(details.photoURL!) : null, child: details.photoURL == null ? const Icon(Icons.person, size: 40) : null),
-      const SizedBox(height: 16),
-      Text(details.name, style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-      if (details.departmentName != null) ...[
-        const SizedBox(height: 4),
-        Text(details.departmentName!, style: Theme.of(context).textTheme.bodyMedium),
-      ],
-    ]);
-  }
-}
-
 class _SectionRosterContent extends StatefulWidget {
   final List<SectionStudent> students;
   final Session session;
@@ -1009,9 +991,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
       // Use the dateStr provided from parent widget
       // This contains the selected date from the UI, not today's date
       final actualDateStr = widget.dateStr;
-
-      debugPrint('[ATTENDANCE_UI] Loading attendance for date: $actualDateStr');
-
       // Use dependency injection to get the service
       final service = FirestoreScheduleService();
       final records = await service.fetchStudentAttendanceForSession(
@@ -1035,7 +1014,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
         setState(() {
           error = e.toString();
           isLoading = false;
-          debugPrint('[ATTENDANCE_UI] Error loading attendance: $e');
         });
       }
     }

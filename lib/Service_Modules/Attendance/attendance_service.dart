@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:project_agila/Service_Modules/Notification/notification_service.dart';
 
 // ============================ DATA MODELS ============================
 
@@ -139,6 +140,7 @@ abstract class AttendanceService {
 class FirestoreAttendanceService implements AttendanceService {
   final FirebaseFirestore _db;
   // Add simple caching to improve performance
+  final NotificationService _notificationService = NotificationService(); // Instantiate the service
   final Map<String, ActiveTerm> _termCache = {};
 
   FirestoreAttendanceService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
@@ -174,8 +176,39 @@ class FirestoreAttendanceService implements AttendanceService {
       final sessionsForDay = sessionsByWeekday[d.weekday] ?? [];
       sessionsForDay.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
       results[d] = sessionsForDay;
+
+      // --- NEW: Schedule notifications for today ---
+      final today = DateTime.now();
+      if (d.year == today.year && d.month == today.month && d.day == today.day) {
+        _scheduleIncomingClassNotifications(sessionsForDay);
+      }
+      // --- End new code ---
     }
     return (results, activeTerm);
+  }
+
+  // --- NEW METHOD TO SCHEDULE NOTIFICATIONS ---
+  Future<void> _scheduleIncomingClassNotifications(List<Session> sessions) async {
+    debugPrint('[NOTIFICATION] Checking ${sessions.length} sessions for student to schedule notifications.');
+    final now = DateTime.now();
+
+    for (final session in sessions) {
+      final startTimeMinutes = session.startMinutes;
+      final classDateTime = DateTime(now.year, now.month, now.day, startTimeMinutes ~/ 60, startTimeMinutes % 60);
+
+      // Schedule notification 15 minutes before the class starts
+      final notificationTime = classDateTime.subtract(const Duration(minutes: 15));
+
+      // Only schedule if the notification time is in the future
+      if (notificationTime.isAfter(now)) {
+        await _notificationService.scheduleNotification(
+          id: session.id.hashCode, // Use a unique ID for each notification
+          title: 'Upcoming Class',
+          body: 'Your class "${session.subject}" starts in 15 minutes.',
+          scheduledTime: notificationTime,
+        );
+      }
+    }
   }
 
 
@@ -591,7 +624,7 @@ class FirestoreAttendanceService implements AttendanceService {
         final fullName = '$firstName $lastName'.trim();
         final studentNumber = _strOrNull(studentData['studentNumber']);
         final academicStatus = _strOrNull(studentData['academicStatus']);
-        final studentId = _strOrNull(studentData['id']);
+        final studentId = _strOrNull(studentData['id']) ?? _strOrNull(studentData['userId']);
 
         debugPrint('[ATTENDANCE] Creating absent record for $fullName (ID: $studentId)');
         await studentRef.set({
@@ -883,6 +916,16 @@ class FirestoreAttendanceService implements AttendanceService {
     return term;
   }
 
+  String _formatSubjectDisplay(Map<String, dynamic> data) {
+    final code = _strOrNull(data['subjectCode']);
+    final name = _strOrNull(data['subjectName']);
+
+    if (code != null && name != null) {
+      return '$code - $name';
+    }
+    return name ?? code ?? 'No Subject';
+  }
+
   // Helper for mapping regular DocumentSnapshot to Sessions
   List<Session> _mapDocToSessions2(DocumentSnapshot<Map<String, dynamic>> d, {String? sectionName}) {
     final data = d.data() ?? {};
@@ -893,7 +936,7 @@ class FirestoreAttendanceService implements AttendanceService {
     return weekdays.map((weekday) {
       return Session(
         id: d.id,
-        subject: (data['subjectName'] ?? data['subjectCode'] ?? 'No Subject').toString(),
+        subject: _formatSubjectDisplay(data),
         section: sectionName ?? 'No Section',
         room: _strOrNull(data['roomName'] ?? data['room']) ?? 'N/A',
         roomType: (data['roomType'] as String?)?.toUpperCase() ?? 'LECTURE',

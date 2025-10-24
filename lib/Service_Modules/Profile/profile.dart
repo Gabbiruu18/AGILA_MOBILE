@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:project_agila/Screens/UI_Screen/settings.dart';
+import 'package:project_agila/Service_Modules/Settings/settings.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_controller.dart';
 import 'package:project_agila/Service_Modules/Profile/profile_UI.dart';
 

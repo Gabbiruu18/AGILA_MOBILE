@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
+import 'package:project_agila/Service_Modules/Notification/notification_service.dart'; // Import the notification service
 
 // ============================ DATA MODELS (UPDATED) ============================
 
@@ -210,6 +211,7 @@ abstract class ScheduleService {
 class FirestoreScheduleService implements ScheduleService {
   final FirebaseFirestore _db;
   // Add simple caching to improve performance
+  final NotificationService _notificationService = NotificationService(); // Instantiate the service
   final Map<String, ActiveTerm> _termCache = {};
 
   FirestoreScheduleService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
@@ -248,8 +250,38 @@ class FirestoreScheduleService implements ScheduleService {
       final sessionsForDay = sessionsByWeekday[d.weekday] ?? [];
       sessionsForDay.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
       results[d] = sessionsForDay;
+
+      // --- NEW: Schedule notifications for today ---
+      final today = DateTime.now();
+      if (d.year == today.year && d.month == today.month && d.day == today.day) {
+        _scheduleIncomingClassNotifications(sessionsForDay);
+      }
+      // --- End new code ---
     }
     return (results, activeTerm);
+  }
+
+  // --- NEW METHOD TO SCHEDULE NOTIFICATIONS ---
+  Future<void> _scheduleIncomingClassNotifications(List<Session> sessions) async {
+    final now = DateTime.now();
+
+    for (final session in sessions) {
+      final startTimeMinutes = session.startMinutes;
+      final classDateTime = DateTime(now.year, now.month, now.day, startTimeMinutes ~/ 60, startTimeMinutes % 60);
+
+      // Schedule notification 15 minutes before the class starts
+      final notificationTime = classDateTime.subtract(const Duration(minutes: 15));
+
+      // Only schedule if the notification time is in the future
+      if (notificationTime.isAfter(now)) {
+        await _notificationService.scheduleNotification(
+          id: session.id.hashCode, // Use a unique ID for each notification
+          title: 'Upcoming Class',
+          body: 'Your class "${session.subject}" starts in 15 minutes.',
+          scheduledTime: notificationTime,
+        );
+      }
+    }
   }
 
   Future<List<Session>> _fetchTeacherSchedules({required String uid, required ActiveTerm activeTerm}) async {
@@ -300,49 +332,31 @@ class FirestoreScheduleService implements ScheduleService {
         dateStrings.add(_formatDateStr(d));
       }
 
-      debugPrint('[ATTENDANCE DEBUG] ======================================');
-      debugPrint('[ATTENDANCE DEBUG] CURRENT USER: $userId');
-      debugPrint('[ATTENDANCE DEBUG] ROLE: $role');
-      debugPrint('[ATTENDANCE DEBUG] Current date: ${_formatDateStr(DateTime.now())}');
-      debugPrint('[ATTENDANCE DEBUG] Fetching attendance for dates: $dateStrings');
-      debugPrint('[ATTENDANCE DEBUG] Total sessions to check: ${sessions.length}');
-
-      // Create a set of valid scheduleIds that the user is enrolled in
       final enrolledScheduleIds = sessions.map((s) => s.id).toSet();
-      debugPrint('[ATTENDANCE DEBUG] Enrolled schedule IDs: $enrolledScheduleIds');
-
-      // Map to store fetched attendance sessions by scheduleId for quick lookup
       final attendanceBySubjectId = <String, List<DocumentSnapshot<Map<String, dynamic>>>>{};
       int totalAttendanceRecords = 0;
       final now = DateTime.now(); // Get current time for absence check
 
-      // Query attendance sessions for each date in range
       for (final dateStr in dateStrings) {
         try {
-          debugPrint('[ATTENDANCE DEBUG] Querying collection "attendance_sessions" with dateStr = $dateStr');
 
           final snapshot = await _db
               .collection('attendance_sessions')
               .where('dateStr', isEqualTo: dateStr)
               .get();
 
-          debugPrint('[ATTENDANCE DEBUG] Found ${snapshot.docs.length} attendance sessions for date $dateStr');
           totalAttendanceRecords += snapshot.docs.length;
 
           // Check each session for this user's attendance
           for (final doc in snapshot.docs) {
             final data = doc.data();
-            final subjectName = _strOrNull(data['subjectName']) ?? 'Unknown Subject';
             final scheduleId = _strOrNull(data['scheduleId']);
-
-            debugPrint('[USER CHECK] Checking for user $userId in session: $subjectName');
 
             try {
               // Store the attendance session document regardless of whether the user has a record
               // We'll use this to mark absences for any session that has ended
               if (scheduleId != null && enrolledScheduleIds.contains(scheduleId)) {
                 attendanceBySubjectId.putIfAbsent(scheduleId, () => []).add(doc);
-                debugPrint('[ATTENDANCE DEBUG] Added attendance session: $subjectName (ID: $scheduleId)');
               }
 
               if (role == 'teacher' || role == 'program_head') {
@@ -356,12 +370,8 @@ class FirestoreScheduleService implements ScheduleService {
 
                   // Check if this instructor document is for the current user
                   if (instructorId == userId) {
-                    debugPrint('[USER CHECK] ✅ FOUND INSTRUCTOR RECORD!');
-                    debugPrint('[USER CHECK] Path: ${mainCollectionRef.path}');
-                    debugPrint('[USER CHECK] Status: ${mainData['status'] ?? 'N/A'}');
                   }
                 } else {
-                  debugPrint('[USER CHECK] ❌ No instructor record found for this session');
                 }
               } else {
                 // For students, check the students collection
@@ -369,13 +379,9 @@ class FirestoreScheduleService implements ScheduleService {
                 final studentAttendanceDoc = await studentRef.get();
 
                 if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
-                  debugPrint('[USER CHECK] ✅ FOUND STUDENT ATTENDANCE RECORD!');
-                  debugPrint('[USER CHECK] Path: ${studentRef.path}');
 
                   final studentData = studentAttendanceDoc.data()!;
-                  debugPrint('[USER CHECK] Status: ${studentData['status'] ?? 'N/A'}');
                 } else {
-                  debugPrint('[USER CHECK] ❌ No student attendance record found for this session');
                 }
               }
             } catch (e) {
@@ -386,11 +392,6 @@ class FirestoreScheduleService implements ScheduleService {
           debugPrint('[ATTENDANCE DEBUG] Error fetching attendance for date $dateStr: $e');
         }
       }
-
-      // Debug output of found sessions
-      debugPrint('[ATTENDANCE DEBUG] Found $totalAttendanceRecords total attendance records');
-      debugPrint('[ATTENDANCE DEBUG] Attendance data found for enrolled subjects: ${attendanceBySubjectId.keys.join(', ')}');
-
       // Process each session and find matching attendance data
       final enrichedSessions = <Session>[];
       int matchesFound = 0;
@@ -400,15 +401,11 @@ class FirestoreScheduleService implements ScheduleService {
         final matchingAttendanceDocs = attendanceBySubjectId[session.id] ?? [];
         bool foundAttendanceRecord = false;
 
-        debugPrint('[ATTENDANCE DEBUG] Checking session: ${session.subject} (ID: ${session.id})');
-        debugPrint('[ATTENDANCE DEBUG] Found ${matchingAttendanceDocs.length} matching attendance docs');
-
         for (final doc in matchingAttendanceDocs) {
           try {
             if (role == 'teacher' || role == 'program_head') {
               // Get the instructor's attendance record
               final mainRef = doc.reference.collection('instructor').doc('main');
-              debugPrint('[ATTENDANCE DEBUG] Looking up instructor record: ${mainRef.path}');
 
               final mainDoc = await mainRef.get();
 
@@ -417,7 +414,6 @@ class FirestoreScheduleService implements ScheduleService {
 
                 // Check if this instructor document is for the current user
                 if (mainData['instructorId'] == userId) {
-                  debugPrint('[ATTENDANCE DEBUG] ✅ Found instructor attendance record!');
                   foundAttendanceRecord = true;
 
                   final status = _parseAttendanceStatus(mainData['status']);
@@ -447,17 +443,14 @@ class FirestoreScheduleService implements ScheduleService {
             } else {
               // Get the student's attendance record
               final studentRef = doc.reference.collection('students').doc(userId);
-              debugPrint('[ATTENDANCE DEBUG] Looking up: ${studentRef.path}');
 
               final studentAttendanceDoc = await studentRef.get();
 
               if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
-                debugPrint('[ATTENDANCE DEBUG] ✅ Found student attendance record!');
                 final attendanceData = studentAttendanceDoc.data()!;
                 foundAttendanceRecord = true;
 
                 final statusValue = attendanceData['status'];
-                debugPrint('[ATTENDANCE DEBUG] Status: $statusValue');
 
                 // Update the session with attendance data
                 final status = _parseAttendanceStatus(statusValue);
@@ -485,8 +478,6 @@ class FirestoreScheduleService implements ScheduleService {
 
                 matchesFound++;
                 break;
-              } else {
-                debugPrint('[ATTENDANCE DEBUG] ❌ Student record not found in attendance session');
               }
             }
           } catch (e) {
@@ -520,12 +511,9 @@ class FirestoreScheduleService implements ScheduleService {
                   endMinute
               );
 
-              debugPrint('[ATTENDANCE DEBUG] Session end time with no attendance session: $sessionEndTime, Current time: $now');
 
               // If session end time has passed and no attendance session was created
               if (now.isAfter(sessionEndTime)) {
-                debugPrint('[ATTENDANCE DEBUG] ⚠️ Session has ended with no attendance session created.');
-
                 // Update the session status to show it's done but had no attendance tracking
                 enrichedSession = Session(
                   id: session.id,
@@ -579,12 +567,9 @@ class FirestoreScheduleService implements ScheduleService {
                   endMinute
               );
 
-              debugPrint('[ATTENDANCE DEBUG] Session end time: $sessionEndTime, Current time: $now');
 
               // If session end time has passed and no attendance record found
               if (now.isAfter(sessionEndTime)) {
-                debugPrint('[ATTENDANCE DEBUG] ⚠️ Session has ended with no attendance record. Marking absent.');
-
                 // Get the attendance session document ID
                 final attendanceSessionId = attendanceDoc.id;
 
@@ -634,11 +619,6 @@ class FirestoreScheduleService implements ScheduleService {
 
         enrichedSessions.add(enrichedSession);
       }
-
-      debugPrint('[ATTENDANCE DEBUG] Enrichment complete. Found attendance data for $matchesFound out of ${sessions.length} sessions');
-      debugPrint('[USER CHECK] SUMMARY: Found attendance data for $matchesFound out of ${sessions.length} sessions');
-      debugPrint('[ATTENDANCE DEBUG] ======================================');
-
       return enrichedSessions;
     } catch (e) {
       debugPrint('[ATTENDANCE DEBUG] Error enriching sessions with attendance data: $e');
@@ -659,57 +639,13 @@ class FirestoreScheduleService implements ScheduleService {
     };
 
     try {
-      debugPrint('[PDF] Starting fetchSessionAcademicDetails for scheduleId: $scheduleId');
 
       if (activeTerm == null) {
-        debugPrint('[PDF] No active term available');
         return result;
       }
-
-      // Get the schedule document first
-      final scheduleQuery = await _db.collectionGroup('schedules')
-          .where(FieldPath.documentId, isEqualTo: _db.doc(scheduleId).id)
-          .limit(1)
-          .get();
-
-      if (scheduleQuery.docs.isEmpty) {
-        debugPrint('[PDF] Schedule not found with ID: $scheduleId');
-        return result;
-      }
-
-      final scheduleDoc = scheduleQuery.docs.first;
-      debugPrint('[PDF] Found schedule document at path: ${scheduleDoc.reference.path}');
-
-      // Extract section reference and path components
-      final sectionRef = scheduleDoc.reference.parent.parent;
-      if (sectionRef == null) {
-        debugPrint('[PDF] Section reference is null');
-        return result;
-      }
-
-      // Parse the path to extract IDs
-      final pathParts = sectionRef.path.split('/');
-      if (pathParts.length < 10) {
-        debugPrint('[PDF] Path format unexpected: ${sectionRef.path}');
-        return result;
-      }
-
-      // Extract IDs from path
-      final academicYearId = pathParts[1];
-      final semesterId = pathParts[3];
-      final departmentId = pathParts[5];
-      final courseId = pathParts[7];
-      final yearLevelId = pathParts[9];
-
-      debugPrint('[PDF] Extracted IDs from path:');
-      debugPrint('[PDF] - academicYearId: $academicYearId');
-      debugPrint('[PDF] - semesterId: $semesterId');
-      debugPrint('[PDF] - departmentId: $departmentId');
-      debugPrint('[PDF] - courseId: $courseId');
-      debugPrint('[PDF] - yearLevelId: $yearLevelId');
 
       // Fetch academic year details directly
-      final yearDoc = await _db.collection('academic_years').doc(academicYearId).get();
+      final yearDoc = await _db.collection('academic_years').doc(activeTerm.academicYearId).get();
       if (yearDoc.exists && yearDoc.data() != null) {
         final yearData = yearDoc.data()!;
         result['acadYear'] = _strOrNull(yearData['acadYear'] ?? yearData['name']) ?? 'Current Academic Year';
@@ -718,62 +654,40 @@ class FirestoreScheduleService implements ScheduleService {
 
       // Fetch semester details
       final semDoc = await _db.collection('academic_years')
-          .doc(academicYearId)
+          .doc(activeTerm.academicYearId)
           .collection('semesters')
-          .doc(semesterId)
+          .doc(activeTerm.semesterId)
           .get();
-
       if (semDoc.exists && semDoc.data() != null) {
         final semData = semDoc.data()!;
         result['semesterName'] = _strOrNull(semData['semesterName'] ?? semData['name'] ?? semData['title']) ?? 'Current Semester';
         debugPrint('[PDF] Semester name: ${result['semesterName']}');
       }
 
-      // Fetch section details
-      final secDoc = await sectionRef.get();
-      if (secDoc.exists && secDoc.data() != null) {
-        result['sectionName'] = _strOrNull(secDoc.data()?['sectionName'] ?? secDoc.data()?['name']) ?? '';
-        debugPrint('[PDF] Section name: ${result['sectionName']}');
+      // Search for the schedule document to find its path
+      final departmentsSnap = await semDoc.reference.collection('departments').get();
+      for (final deptDoc in departmentsSnap.docs) {
+        final coursesSnap = await deptDoc.reference.collection('courses').get();
+        for (final courseDoc in coursesSnap.docs) {
+          final yearLevelsSnap = await courseDoc.reference.collection('year_levels').get();
+          for (final yearLevelDoc in yearLevelsSnap.docs) {
+            final sectionsSnap = await yearLevelDoc.reference.collection('sections').get();
+            for (final sectionDoc in sectionsSnap.docs) {
+              final scheduleDoc = await sectionDoc.reference.collection('schedules').doc(scheduleId).get();
+              if (scheduleDoc.exists) {
+                // Found it! Now fill in the details.
+                result['courseName'] = _strOrNull(courseDoc.data()['courseName']) ?? '';
+                result['yearLevelName'] = _strOrNull(yearLevelDoc.data()['yearLevelName']) ?? '';
+                result['sectionName'] = _strOrNull(sectionDoc.data()['sectionName'] ?? sectionDoc.data()['name']) ?? '';
+                return result; // Exit once found
+              }
+            }
+          }
+        }
       }
-
-      // Fetch year level details
-      final yearLevelRef = _db.collection('academic_years')
-          .doc(academicYearId)
-          .collection('semesters')
-          .doc(semesterId)
-          .collection('departments')
-          .doc(departmentId)
-          .collection('courses')
-          .doc(courseId)
-          .collection('year_levels')
-          .doc(yearLevelId);
-
-      final yearLevelDoc = await yearLevelRef.get();
-      if (yearLevelDoc.exists && yearLevelDoc.data() != null) {
-        result['yearLevelName'] = _strOrNull(yearLevelDoc.data()?['name']) ?? '';
-        debugPrint('[PDF] Year level name: ${result['yearLevelName']}');
-      }
-
-      // Fetch course details
-      final courseRef = _db.collection('academic_years')
-          .doc(academicYearId)
-          .collection('semesters')
-          .doc(semesterId)
-          .collection('departments')
-          .doc(departmentId)
-          .collection('courses')
-          .doc(courseId);
-
-      final courseDoc = await courseRef.get();
-      if (courseDoc.exists && courseDoc.data() != null) {
-        result['courseName'] = _strOrNull(courseDoc.data()?['name']) ?? '';
-        debugPrint('[PDF] Course name: ${result['courseName']}');
-      }
-
       return result;
+
     } catch (e) {
-      debugPrint('[PDF] Error fetching academic details: $e');
-      debugPrintStack(label: '[PDF] Stack trace');
       return result;
     }
   }
@@ -786,9 +700,6 @@ class FirestoreScheduleService implements ScheduleService {
     try {
       // Use provided date or default to current date
       final actualDateStr = dateStr ?? _formatDateStr(DateTime.now());
-
-      debugPrint('[ATTENDANCE] Fetching student attendance for schedule $scheduleId on date $actualDateStr');
-
       // First, find the attendance session document for this schedule on this date
       final attendanceSessionsQuery = await _db
           .collection('attendance_sessions')
@@ -798,19 +709,16 @@ class FirestoreScheduleService implements ScheduleService {
           .get();
 
       if (attendanceSessionsQuery.docs.isEmpty) {
-        debugPrint('[ATTENDANCE] No attendance session found for this date and schedule');
         return [];
       }
 
       final attendanceSessionDoc = attendanceSessionsQuery.docs.first;
-      debugPrint('[ATTENDANCE] Found attendance session: ${attendanceSessionDoc.id}');
 
       // Get all students attendance records from this session
       final studentsSnap = await attendanceSessionDoc.reference
           .collection('students')
           .get();
 
-      debugPrint('[ATTENDANCE] Found ${studentsSnap.docs.length} student attendance records');
 
       final attendanceRecords = <StudentAttendanceRecord>[];
 
@@ -876,7 +784,6 @@ class FirestoreScheduleService implements ScheduleService {
       return attendanceRecords;
 
     } catch (e) {
-      debugPrint('[ATTENDANCE] Error fetching student attendance: $e');
       return [];
     }
   }
@@ -899,7 +806,6 @@ class FirestoreScheduleService implements ScheduleService {
       // Check if document already exists
       final docSnap = await studentRef.get();
       if (docSnap.exists) {
-        debugPrint('[ATTENDANCE] Student attendance record already exists, skipping');
         return;
       }
 
@@ -912,7 +818,6 @@ class FirestoreScheduleService implements ScheduleService {
           .get();
 
       if (!studentDoc.exists || studentDoc.data() == null) {
-        debugPrint('[ATTENDANCE] Student account document not found, cannot mark absent');
         return;
       }
 
@@ -924,9 +829,6 @@ class FirestoreScheduleService implements ScheduleService {
       final studentNumber = _strOrNull(studentData['studentNumber']);
       final academicStatus = _strOrNull(studentData['academicStatus']);
       final studentId = _strOrNull(studentData['id']);
-
-      debugPrint('[ATTENDANCE] Marking student $fullName (ID: $studentId) as absent');
-
       // Create the document with absent status
       await studentRef.set({
         'studentId': studentId,
@@ -939,7 +841,6 @@ class FirestoreScheduleService implements ScheduleService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      debugPrint('[ATTENDANCE] Successfully marked student as absent');
     } catch (e) {
       debugPrint('[ATTENDANCE] Error marking student as absent: $e');
     }
@@ -952,7 +853,6 @@ class FirestoreScheduleService implements ScheduleService {
     required String teacherName,
   }) async {
     try {
-      debugPrint('[ATTENDANCE] Marking teacher $teacherName as absent for session $attendanceSessionId');
 
       // Reference to the instructor document
       final instructorRef = _db
@@ -964,7 +864,6 @@ class FirestoreScheduleService implements ScheduleService {
       // Check if document already exists
       final docSnap = await instructorRef.get();
       if (docSnap.exists) {
-        debugPrint('[ATTENDANCE] Instructor document already exists, skipping');
         return;
       }
 
@@ -978,7 +877,6 @@ class FirestoreScheduleService implements ScheduleService {
         'createdAt': FieldValue.serverTimestamp(),
       });
 
-      debugPrint('[ATTENDANCE] Successfully marked teacher as absent');
     } catch (e) {
       debugPrint('[ATTENDANCE] Error marking teacher as absent: $e');
     }
@@ -1065,7 +963,6 @@ class FirestoreScheduleService implements ScheduleService {
     required String sectionName,
     required String scheduleId
   }) async {
-    debugPrint("[Roster] Fetching students for section $sectionName, schedule $scheduleId");
 
     try {
       // Get the schedule reference - avoid collection group query that was causing issues
@@ -1084,7 +981,6 @@ class FirestoreScheduleService implements ScheduleService {
       }
 
       if (scheduleRef == null) {
-        debugPrint("[Roster] Schedule not found with ID: $scheduleId");
         return [];
       }
 
@@ -1092,11 +988,8 @@ class FirestoreScheduleService implements ScheduleService {
       final enrolledStudentsSnap = await scheduleRef.collection('enrolled_students').get();
 
       if (enrolledStudentsSnap.docs.isEmpty) {
-        debugPrint("[Roster] No students enrolled in this section");
         return [];
       }
-
-      debugPrint("[Roster] Found ${enrolledStudentsSnap.docs.length} enrollment records");
 
       // Process enrolled students
       final students = <SectionStudent>[];
@@ -1107,14 +1000,10 @@ class FirestoreScheduleService implements ScheduleService {
           final studentIdField = _strOrNull(data['studentId']);
 
           if (studentIdField == null || studentIdField.isEmpty) {
-            debugPrint("[Roster] Missing studentId in enrollment doc");
             continue;
           }
 
-          debugPrint("[Roster] Looking up student with ID: $studentIdField");
-
           QuerySnapshot<Map<String, dynamic>> studentQuery;
-
           // First try 'id' field
           studentQuery = await _db.collection('users')
               .doc('student')
@@ -1149,7 +1038,6 @@ class FirestoreScheduleService implements ScheduleService {
                 photoURL: _strOrNull(studentData['photoURL']),
                 studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
               ));
-              debugPrint("[Roster] Added student via direct lookup: ${directLookup.id}");
             } else {
               debugPrint("[Roster] Student not found for ID: $studentIdField");
             }
@@ -1163,7 +1051,6 @@ class FirestoreScheduleService implements ScheduleService {
               photoURL: _strOrNull(studentData['photoURL']),
               studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
             ));
-            debugPrint("[Roster] Added student: ${studentDoc.id}");
           }
         } catch (e) {
           debugPrint("[Roster] Error processing student: $e");
@@ -1172,15 +1059,14 @@ class FirestoreScheduleService implements ScheduleService {
 
       // Sort students by name
       students.sort((a, b) => a.name.compareTo(b.name));
-      debugPrint("[Roster] Found ${students.length} students");
       return students;
 
     } catch (e) {
-      debugPrint("[Roster] Error fetching students: $e");
       return [];
     }
   }
 
+  @override
   Future<InstructorDetails?> fetchInstructorDetails({required String instructorId}) async {
     if (instructorId.trim().isEmpty) {
       return null;
@@ -1236,7 +1122,6 @@ class FirestoreScheduleService implements ScheduleService {
       itemsWithSections.sort((a, b) => a.time.compareTo(b.time));
       return itemsWithSections;
     } catch (e) {
-      debugPrint("[ScheduleService] Error fetching schedules for room '$roomName': $e");
       return [];
     }
   }
@@ -1258,7 +1143,6 @@ class FirestoreScheduleService implements ScheduleService {
       try {
         return DateTime.parse(value);
       } catch (e) {
-        debugPrint("Failed to parse date string: $value");
         return null;
       }
     }
@@ -1271,10 +1155,6 @@ class FirestoreScheduleService implements ScheduleService {
 
     final rawValue = statusValue.toString();
     final status = rawValue.toLowerCase().trim();
-
-    debugPrint('[STATUS PARSER] Raw status value: "$rawValue"');
-    debugPrint('[STATUS PARSER] Lowercase status: "$status"');
-
     // First handle direct lowercase comparisons
     if (status == 'present') return AttendanceStatus.present;
     if (status == 'late') return AttendanceStatus.late;
@@ -1289,11 +1169,8 @@ class FirestoreScheduleService implements ScheduleService {
 
     // Special handling for ongoing status
     if (status == 'ongoing') {
-      debugPrint('[STATUS PARSER] Found ongoing status - treating as scheduled');
       return AttendanceStatus.scheduled;
     }
-
-    debugPrint('[STATUS PARSER] ⚠️ UNRECOGNIZED STATUS: "$rawValue" - defaulting to scheduled');
     return AttendanceStatus.scheduled;
   }
 
@@ -1341,10 +1218,21 @@ class FirestoreScheduleService implements ScheduleService {
     final weekdays = daysList.map((day) => _dayNameToWeekday(day.toString())).where((d) => d != -1).toList();
     final startStr = (data['startTime'] ?? data['timeStart'] ?? '').toString();
     final endStr = (data['endTime'] ?? data['timeEnd'] ?? '').toString();
+
+    // Combine subject code and name
+    final subjectCode = _strOrNull(data['subjectCode']);
+    final subjectNameStr = _strOrNull(data['subjectName']);
+    String displaySubject = subjectNameStr ?? 'No Subject';
+    if (subjectCode != null && subjectNameStr != null) {
+      displaySubject = '$subjectCode - $subjectNameStr';
+    } else if (subjectCode != null) {
+      displaySubject = subjectCode;
+    }
+
     return weekdays.map((weekday) {
       return Session(
         id: d.id,
-        subject: (data['subjectName'] ?? data['subjectCode'] ?? 'No Subject').toString(),
+        subject: displaySubject,
         section: sectionName ?? 'No Section',
         room: _strOrNull(data['roomName'] ?? data['room']) ?? 'N/A',
         roomType: (data['roomType'] as String?)?.toUpperCase() ?? 'LECTURE',
