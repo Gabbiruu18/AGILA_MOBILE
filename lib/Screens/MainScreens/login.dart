@@ -38,14 +38,21 @@ class LoginScreenState extends State<LoginScreen> {
       // Use a post-frame callback to safely show a dialog after the first build.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => const TermsDialog(),
-          );
+          _showTermsDialog();
         }
       });
     }
+  }
+
+  void _showTermsDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const TermsDialog(),
+    ).then((_) {
+      // When dialog is closed, reload the terms acceptance state
+      _loadInitialState();
+    });
   }
 
   Future<void> _toggleTerms(bool? value) async {
@@ -75,9 +82,9 @@ class LoginScreenState extends State<LoginScreen> {
                       fit: BoxFit.contain,
                       filterQuality: FilterQuality.high,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 24),
                     Text(
-                      'AI-Driven General Identification and Logging Attendance',
+                      'AI-Guided Identification and Logging Classroom Monitoring Attendance',
                       textAlign: TextAlign.center,
                       style: GoogleFonts.poppins(fontSize: 14, color: Theme.of(context).colorScheme.primary),
                     ),
@@ -177,7 +184,7 @@ class LoginScreenState extends State<LoginScreen> {
             : () async {
           FocusScope.of(context).unfocus();
           if (!_termsAccepted) {
-            showDialog(context: context, barrierDismissible: false, builder: (_) => const TermsDialog());
+            _showTermsDialog();
             return;
           }
 

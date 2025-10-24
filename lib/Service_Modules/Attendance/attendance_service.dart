@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 
 // ============================ DATA MODELS ============================
 
-enum AttendanceStatus { scheduled, present, late, absent, excused }
+enum AttendanceStatus { scheduled, present, late, absent, excused, none }
 
 class Session {
   final String id;
@@ -177,6 +177,8 @@ class FirestoreAttendanceService implements AttendanceService {
     }
     return (results, activeTerm);
   }
+
+
   Future<List<Session>> _enrichSessionsWithAttendanceData(
       List<Session> sessions,
       String userId,
@@ -196,9 +198,14 @@ class FirestoreAttendanceService implements AttendanceService {
       debugPrint('[ATTENDANCE DEBUG] Fetching attendance for dates: $dateStrings');
       debugPrint('[ATTENDANCE DEBUG] Total sessions to check: ${sessions.length}');
 
+      // Create a set of valid scheduleIds that the student is enrolled in
+      final enrolledScheduleIds = sessions.map((s) => s.id).toSet();
+      debugPrint('[ATTENDANCE DEBUG] Enrolled schedule IDs: $enrolledScheduleIds');
+
       // Map to store fetched attendance sessions by scheduleId for quick lookup
       final attendanceBySubjectId = <String, List<DocumentSnapshot<Map<String, dynamic>>>>{};
       int totalAttendanceRecords = 0;
+      final now = DateTime.now(); // Get current time for absence check
 
       // Query attendance sessions for each date in range
       for (final dateStr in dateStrings) {
@@ -219,10 +226,17 @@ class FirestoreAttendanceService implements AttendanceService {
             final subjectName = _strOrNull(data['subjectName']) ?? 'Unknown Subject';
             final scheduleId = _strOrNull(data['scheduleId']);
 
-
             debugPrint('[USER CHECK] Checking for user $userId in session: $subjectName');
 
             try {
+              // Store the attendance session document regardless of whether the student has a record
+              // We'll use this to mark absences for any session that has ended
+              if (scheduleId != null && enrolledScheduleIds.contains(scheduleId)) {
+                attendanceBySubjectId.putIfAbsent(scheduleId, () => []).add(doc);
+                debugPrint('[ATTENDANCE DEBUG] Added attendance session: $subjectName (ID: $scheduleId) - Student enrolled');
+              }
+
+              // Check if student already has an attendance record
               final userAttendanceRef = doc.reference.collection('students').doc(userId);
               final userAttendanceDoc = await userAttendanceRef.get();
 
@@ -231,29 +245,11 @@ class FirestoreAttendanceService implements AttendanceService {
                 debugPrint('[USER CHECK] ✅ FOUND ATTENDANCE RECORD!');
                 debugPrint('[USER CHECK] Path: ${userAttendanceRef.path}');
                 debugPrint('[USER CHECK] Status: ${userData?['status'] ?? 'N/A'}');
-                debugPrint('[USER CHECK] Source: ${userData?['source'] ?? 'N/A'}');
-
-                if (userData?['firstSeen'] != null) {
-                  final firstSeen = (userData!['firstSeen'] as Timestamp).toDate();
-                  debugPrint('[USER CHECK] First seen: $firstSeen');
-                }
-
-                if (userData?['lastSeen'] != null) {
-                  final lastSeen = (userData!['lastSeen'] as Timestamp).toDate();
-                  debugPrint('[USER CHECK] Last seen: $lastSeen');
-                }
               } else {
                 debugPrint('[USER CHECK] ❌ No attendance record found for this session');
               }
             } catch (e) {
               debugPrint('[USER CHECK] Error checking attendance: $e');
-            }
-
-            if (scheduleId != null) {
-              attendanceBySubjectId.putIfAbsent(scheduleId, () => []).add(doc);
-              debugPrint('[ATTENDANCE DEBUG] Added attendance session: $subjectName (ID: $scheduleId)');
-            } else {
-              debugPrint('[ATTENDANCE DEBUG] Skipping attendance session without scheduleId: ${doc.id}');
             }
           }
         } catch (e) {
@@ -263,7 +259,7 @@ class FirestoreAttendanceService implements AttendanceService {
 
       // Debug output of found sessions
       debugPrint('[ATTENDANCE DEBUG] Found $totalAttendanceRecords total attendance records');
-      debugPrint('[ATTENDANCE DEBUG] Attendance data found for subjects: ${attendanceBySubjectId.keys.join(', ')}');
+      debugPrint('[ATTENDANCE DEBUG] Attendance data found for enrolled subjects: ${attendanceBySubjectId.keys.join(', ')}');
 
       // Process each session and find matching attendance data
       final enrichedSessions = <Session>[];
@@ -272,11 +268,10 @@ class FirestoreAttendanceService implements AttendanceService {
       for (final session in sessions) {
         var enrichedSession = session;
         final matchingAttendanceDocs = attendanceBySubjectId[session.id] ?? [];
+        bool foundAttendanceRecord = false;
 
         debugPrint('[ATTENDANCE DEBUG] Checking session: ${session.subject} (ID: ${session.id})');
         debugPrint('[ATTENDANCE DEBUG] Found ${matchingAttendanceDocs.length} matching attendance docs');
-        debugPrint('[USER CHECK] Checking schedule: ${session.subject} (ID: ${session.id})');
-        debugPrint('[USER CHECK] Found ${matchingAttendanceDocs.length} matching attendance docs');
 
         for (final doc in matchingAttendanceDocs) {
           try {
@@ -291,6 +286,7 @@ class FirestoreAttendanceService implements AttendanceService {
             if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
               debugPrint('[ATTENDANCE DEBUG] ✅ Found student attendance record!');
               final attendanceData = studentAttendanceDoc.data()!;
+              foundAttendanceRecord = true;
 
               final statusValue = attendanceData['status'];
               debugPrint('[ATTENDANCE DEBUG] Status: $statusValue');
@@ -309,24 +305,152 @@ class FirestoreAttendanceService implements AttendanceService {
                 colorHex: session.colorHex,
                 instructorId: session.instructorId,
                 instructorName: session.instructorName,
+
                 status: status,
-                firstSeen: _parseTimestamp(attendanceData['firstSeen']),
-                lastSeen: _parseTimestamp(attendanceData['lastSeen']),
-                source: _strOrNull(attendanceData['source']),
+                firstSeen: _parseDate(attendanceData['firstSeen']),
+                lastSeen: _parseDate(attendanceData['lastSeen']),
+                source: session.source,
                 academicStatus: _strOrNull(attendanceData['academicStatus']),
                 studentId: userId,
-                updatedAt: _parseTimestamp(attendanceData['updatedAt']),
+                updatedAt: _parseDate(attendanceData['updatedAt']),
                 studentNo: _strOrNull(attendanceData['studentNo']),
               );
 
               matchesFound++;
-              // Break after finding the first match
               break;
             } else {
               debugPrint('[ATTENDANCE DEBUG] ❌ Student record not found in attendance session');
             }
           } catch (e) {
             debugPrint('[ATTENDANCE DEBUG] Error processing attendance for session ${session.id}: $e');
+          }
+        }
+
+        // Check if we need to mark the student as absent for existing attendance sessions
+        if (!foundAttendanceRecord && matchingAttendanceDocs.isNotEmpty) {
+          // Get the actual date of the attendance session from the document
+          final attendanceDoc = matchingAttendanceDocs.first;
+          final dateStr = _strOrNull(attendanceDoc.data()?['dateStr']);
+
+          if (dateStr != null) {
+            try {
+              // Parse the date from the attendance session
+              final sessionDate = DateTime.parse(dateStr);
+
+              // Calculate the session end time using the date from the attendance document
+              // and the end time from the schedule
+              final endTimeMinutes = session.endMinutes;
+              final endHour = endTimeMinutes ~/ 60;
+              final endMinute = endTimeMinutes % 60;
+
+              final sessionEndTime = DateTime(
+                  sessionDate.year,
+                  sessionDate.month,
+                  sessionDate.day,
+                  endHour,
+                  endMinute
+              );
+
+              debugPrint('[ATTENDANCE DEBUG] Session end time: $sessionEndTime, Current time: $now');
+
+              // If session end time has passed and no attendance record found
+              if (now.isAfter(sessionEndTime)) {
+                debugPrint('[ATTENDANCE DEBUG] ⚠️ Session has ended with no attendance record. Marking absent.');
+
+                // Get the attendance session document ID
+                final attendanceSessionId = attendanceDoc.id;
+
+                // Mark student as absent
+                await markStudentAbsent(
+                  attendanceSessionId: attendanceSessionId,
+                  studentUid: userId,
+                );
+
+                // Update the session with absent status
+                enrichedSession = Session(
+                  id: session.id,
+                  subject: session.subject,
+                  section: session.section,
+                  room: session.room,
+                  roomType: session.roomType,
+                  weekday: session.weekday,
+                  startMinutes: session.startMinutes,
+                  endMinutes: session.endMinutes,
+                  colorHex: session.colorHex,
+                  instructorId: session.instructorId,
+                  instructorName: session.instructorName,
+                  status: AttendanceStatus.none, // Change from absent to done
+                  source: "System",
+                  updatedAt: now,
+                  studentId: userId,
+                );
+
+                matchesFound++;
+              } else {
+                debugPrint('[ATTENDANCE DEBUG] Session has not ended yet. Not marking absent.');
+              }
+            } catch (e) {
+              debugPrint('[ATTENDANCE DEBUG] Error processing date for absence check: $e');
+            }
+          }
+        }
+
+        // NEW: Check if session is past but no attendance session was created
+        if (!foundAttendanceRecord && matchingAttendanceDocs.isEmpty) {
+          try {
+            // Find the date of the session in the queried range
+            DateTime? sessionDate;
+            for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+              if (d.weekday == session.weekday) {
+                sessionDate = d;
+                break;
+              }
+            }
+
+            if (sessionDate != null) {
+              // Calculate session end time
+              final endTimeMinutes = session.endMinutes;
+              final endHour = endTimeMinutes ~/ 60;
+              final endMinute = endTimeMinutes % 60;
+
+              final sessionEndTime = DateTime(
+                  sessionDate.year,
+                  sessionDate.month,
+                  sessionDate.day,
+                  endHour,
+                  endMinute
+              );
+
+              debugPrint('[ATTENDANCE DEBUG] Session end time with no attendance session: $sessionEndTime, Current time: $now');
+
+              // If session end time has passed and no attendance session was created
+              if (now.isAfter(sessionEndTime)) {
+                debugPrint('[ATTENDANCE DEBUG] ⚠️ Session has ended with no attendance session created.');
+
+                // Update the session status to show it's done but had no attendance tracking
+                enrichedSession = Session(
+                  id: session.id,
+                  subject: session.subject,
+                  section: session.section,
+                  room: session.room,
+                  roomType: session.roomType,
+                  weekday: session.weekday,
+                  startMinutes: session.startMinutes,
+                  endMinutes: session.endMinutes,
+                  colorHex: session.colorHex,
+                  instructorId: session.instructorId,
+                  instructorName: session.instructorName,
+                  status: AttendanceStatus.none,
+                  source: "No attendance session created",
+                  updatedAt: now,
+                  studentId: userId,
+                );
+
+                matchesFound++;
+              }
+            }
+          } catch (e) {
+            debugPrint('[ATTENDANCE DEBUG] Error checking for past session with no attendance: $e');
           }
         }
 
@@ -344,15 +468,29 @@ class FirestoreAttendanceService implements AttendanceService {
     }
   }
 
+// Helper method to determine the actual date for a session based on weekday
+
   String _formatDateStr(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
   }
 
-  DateTime? _parseTimestamp(dynamic value) {
+  // NEW HELPER FUNCTION
+  DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) {
+      // It's a Firestore Timestamp, convert it
       return value.toDate();
     }
+    if (value is String && value.isNotEmpty) {
+      // It's a String, parse it
+      try {
+        return DateTime.parse(value);
+      } catch (e) {
+        debugPrint("Failed to parse date string: $value");
+        return null;
+      }
+    }
+    // Not a type we recognize
     return null;
   }
 
@@ -385,6 +523,93 @@ class FirestoreAttendanceService implements AttendanceService {
 
     debugPrint('[STATUS PARSER] ⚠️ UNRECOGNIZED STATUS: "$rawValue" - defaulting to scheduled');
     return AttendanceStatus.scheduled;
+  }
+
+
+
+
+
+  // Add this method to FirestoreAttendanceService class to mark students as absent
+  Future<void> markStudentAbsent({
+    required String attendanceSessionId,
+    required String studentUid,
+  }) async {
+    try {
+      debugPrint('[ATTENDANCE] Marking student $studentUid as absent for session $attendanceSessionId');
+
+      // Reference to the student document in the attendance session
+      final studentRef = _db
+          .collection('attendance_sessions')
+          .doc(attendanceSessionId)
+          .collection('students')
+          .doc(studentUid);
+
+      // Check if document already exists - with more logging
+      final docSnap = await studentRef.get();
+      debugPrint('[ATTENDANCE] Document exists check: ${docSnap.exists}');
+      if (docSnap.exists) {
+        debugPrint('[ATTENDANCE] Student attendance record already exists, skipping');
+        return;
+      }
+
+      // Add a retry mechanism for student document retrieval
+      Map<String, dynamic>? studentData; // FIXED: Changed from StudentData? to Map<String, dynamic>?
+      int retryCount = 0;
+      while (studentData == null && retryCount < 3) {
+        try {
+          final studentDoc = await _db
+              .collection('users')
+              .doc('student')
+              .collection('accounts')
+              .doc(studentUid)
+              .get();
+
+          if (studentDoc.exists && studentDoc.data() != null) {
+            studentData = studentDoc.data();
+            break;
+          }
+          retryCount++;
+        } catch (e) {
+          debugPrint('[ATTENDANCE] Error on attempt $retryCount: $e');
+          retryCount++;
+        }
+      }
+
+      if (studentData == null) {
+        // Use minimal data if student document not found
+        debugPrint('[ATTENDANCE] Student document not found, using minimal data');
+        await studentRef.set({
+          'status': 'Absent',
+          'source': 'System',
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      } else {
+        // Normal case with full student data
+        final firstName = _strOrNull(studentData['firstName']) ?? '';
+        final lastName = _strOrNull(studentData['lastName']) ?? '';
+        final fullName = '$firstName $lastName'.trim();
+        final studentNumber = _strOrNull(studentData['studentNumber']);
+        final academicStatus = _strOrNull(studentData['academicStatus']);
+        final studentId = _strOrNull(studentData['id']);
+
+        debugPrint('[ATTENDANCE] Creating absent record for $fullName (ID: $studentId)');
+        await studentRef.set({
+          'studentId': studentId,
+          'status': 'Absent',
+          'source': 'System',
+          'fullName': fullName,
+          'studentNo': studentNumber,
+          'academicStatus': academicStatus,
+          'updatedAt': FieldValue.serverTimestamp(),
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+      }
+
+      debugPrint('[ATTENDANCE] Successfully marked student as absent');
+    } catch (e) {
+      debugPrint('[ATTENDANCE] Error marking student as absent: $e');
+    }
   }
 
   @override
@@ -424,7 +649,7 @@ class FirestoreAttendanceService implements AttendanceService {
       return [];
     }
     // Get the actual id field from the document
-    final studentIdField = _strOrNull(studentDoc.data()?['id']);
+    final studentIdField = _strOrNull(studentDoc.data()?['userId']) ?? _strOrNull(studentDoc.data()?['id']);
 
     if (studentIdField == null) {
       debugPrint("[AttendanceService] Student document missing id field: $uid");
@@ -480,121 +705,122 @@ class FirestoreAttendanceService implements AttendanceService {
   // --- Detail Panel Fetching ---
 
   @override
-  @override
   Future<List<SectionStudent>> fetchStudentsForSection({
     required String sectionName,
     required String scheduleId
   }) async {
-    debugPrint("[Roster] Fetching students for section $sectionName, schedule $scheduleId using streaming");
-
-    // Create a completer to convert stream to future
-    final completer = Completer<List<SectionStudent>>();
+    debugPrint("[Roster] Fetching students for section $sectionName, schedule $scheduleId");
 
     try {
-      // First find the schedule using collection group query
-      final scheduleQuery = _db.collectionGroup('schedules')
-          .where(FieldPath.documentId, isEqualTo: scheduleId)
-          .limit(1);
+      // Get the schedule reference - avoid collection group query that was causing issues
+      final scheduleSnap = await _db.collectionGroup('schedules')
+          .limit(10) // Limit the number of results for performance
+          .get();
 
-      final scheduleSnap = await scheduleQuery.get();
+      DocumentReference? scheduleRef;
 
-      if (scheduleSnap.docs.isEmpty) {
-        debugPrint("[Roster] Schedule not found");
+      // Find the schedule with matching ID
+      for (final doc in scheduleSnap.docs) {
+        if (doc.id == scheduleId) {
+          scheduleRef = doc.reference;
+          break;
+        }
+      }
+
+      if (scheduleRef == null) {
+        debugPrint("[Roster] Schedule not found with ID: $scheduleId");
         return [];
       }
 
-      // Get the schedule reference
-      final scheduleRef = scheduleSnap.docs.first.reference;
-
-      // Create a StreamController to manage the student data
-      final controller = StreamController<SectionStudent>();
-      final allStudents = <String, SectionStudent>{};
-
-      // Set up the stream listener to collect students
-      // final subscription = controller.stream.listen(
-      //         (student) {
-      //       // Add each student to our map (automatically deduplicates by uid)
-      //       allStudents[student.uid] = student;
-      //     },
-      //     onDone: () {
-      //       // When stream is closed, sort students and complete the future
-      //       final finalRoster = allStudents.values.toList();
-      //       finalRoster.sort((a, b) => a.name.compareTo(b.name));
-      //       completer.complete(finalRoster);
-      //     },
-      //     onError: (error) {
-      //       completer.completeError(error);
-      //     }
-      // );
-
-      // Start streaming enrollment data
+      // Get enrolled students
       final enrolledStudentsSnap = await scheduleRef.collection('enrolled_students').get();
 
       if (enrolledStudentsSnap.docs.isEmpty) {
-        // No students enrolled, close stream and return empty list
-        await controller.close();
+        debugPrint("[Roster] No students enrolled in this section");
         return [];
       }
 
-      // Process each enrollment doc asynchronously
-      int pendingOperations = enrolledStudentsSnap.docs.length;
+      debugPrint("[Roster] Found ${enrolledStudentsSnap.docs.length} enrollment records");
+
+      // Process enrolled students
+      final students = <SectionStudent>[];
 
       for (final enrollDoc in enrolledStudentsSnap.docs) {
-        // Get studentId from enrollment document
-        final studentIdField = _strOrNull(enrollDoc.data()['studentId']);
+        try {
+          // Properly cast the document data to Map<String, dynamic>
+          final data = enrollDoc.data();
+          final studentIdField = _strOrNull(data['studentId']);
 
-        if (studentIdField == null || studentIdField.isEmpty) {
-          // Skip invalid enrollments
-          pendingOperations--;
-          if (pendingOperations == 0) {
-            await controller.close();
+          if (studentIdField == null || studentIdField.isEmpty) {
+            debugPrint("[Roster] Missing studentId in enrollment doc");
+            continue;
           }
-          continue;
-        }
 
-        // Process each student document asynchronously
-        _db.collection('users').doc('student').collection('accounts')
-            .doc(enrollDoc.id)
-            .get()
-            .then((studentDoc) {
-          if (studentDoc.exists && studentDoc.data() != null) {
-            // Get id field for validation
-            final idField = _strOrNull(studentDoc.data()!['id']);
+          debugPrint("[Roster] Looking up student with ID: $studentIdField");
 
-            // Validate id field matches studentId field
-            if (idField == studentIdField) {
-              // Create student object and add to stream
-              final student = SectionStudent(
-                uid: studentDoc.id,
-                name: _combineName(studentDoc.data()!, fallback: 'Unknown Student'),
-                photoURL: _strOrNull(studentDoc.data()!['photoURL']),
-              );
+          // Try to find student by ID
+          QuerySnapshot<Map<String, dynamic>> studentQuery;
 
-              controller.add(student);
-              debugPrint("[Roster] Streamed student: ${student.name}");
+          // First try 'id' field
+          studentQuery = await _db.collection('users')
+              .doc('student')
+              .collection('accounts')
+              .where('id', isEqualTo: studentIdField)
+              .limit(1)
+              .get();
+
+          if (studentQuery.docs.isEmpty) {
+            // Then try 'userId' field
+            studentQuery = await _db.collection('users')
+                .doc('student')
+                .collection('accounts')
+                .where('userId', isEqualTo: studentIdField)
+                .limit(1)
+                .get();
+          }
+
+          if (studentQuery.docs.isEmpty) {
+            // If still not found, try direct document lookup using the enrollment doc ID
+            final directLookup = await _db.collection('users')
+                .doc('student')
+                .collection('accounts')
+                .doc(enrollDoc.id)
+                .get();
+
+            if (directLookup.exists) {
+              final studentData = directLookup.data() as Map<String, dynamic>;
+              students.add(SectionStudent(
+                uid: directLookup.id,
+                name: _combineName(studentData, fallback: 'Unknown Student'),
+                photoURL: _strOrNull(studentData['photoURL']),
+              ));
+              debugPrint("[Roster] Added student via direct lookup: ${directLookup.id}");
+            } else {
+              debugPrint("[Roster] Student not found for ID: $studentIdField");
             }
+          } else {
+            // Student found via query
+            final studentDoc = studentQuery.docs.first;
+            final studentData = studentDoc.data();
+            students.add(SectionStudent(
+              uid: studentDoc.id,
+              name: _combineName(studentData, fallback: 'Unknown Student'),
+              photoURL: _strOrNull(studentData['photoURL']),
+            ));
+            debugPrint("[Roster] Added student: ${studentDoc.id}");
           }
-
-          // Decrement pending operations counter
-          pendingOperations--;
-          if (pendingOperations == 0) {
-            // All operations completed, close the stream
-            controller.close();
-          }
-        }).catchError((error) {
-          debugPrint("[Roster] Error processing student ${enrollDoc.id}: $error");
-          pendingOperations--;
-          if (pendingOperations == 0) {
-            controller.close();
-          }
-        });
+        } catch (e) {
+          debugPrint("[Roster] Error processing student: $e");
+        }
       }
 
-      // Return future that completes when all students are processed
-      return completer.future;
+      // Sort students by name
+      students.sort((a, b) => a.name.compareTo(b.name));
+      debugPrint("[Roster] Found ${students.length} students");
+      return students;
 
     } catch (e) {
-      debugPrint("[Roster] Error in streaming approach: $e");
+      debugPrint("[Roster] Error fetching students: $e");
       return [];
     }
   }
@@ -636,10 +862,14 @@ class FirestoreAttendanceService implements AttendanceService {
 
     final semDoc = semSnap.docs.first;
     final semData = semDoc.data();
-    final startDateString = semData['startDate'] as String?;
-    final endDateString = semData['endDate'] as String?;
-    final startDate = (startDateString != null && startDateString.isNotEmpty) ? DateTime.parse(startDateString) : DateTime.now();
-    final endDate = (endDateString != null && endDateString.isNotEmpty) ? DateTime.parse(endDateString) : DateTime.now().add(const Duration(days: 120));
+
+    final startDate = _parseDate(semData['startDate']) ?? DateTime.now();
+    final endDate = _parseDate(semData['endDate']) ?? DateTime.now().add(const Duration(days: 120));
+
+    // final startDateString = semData['startDate'] as String?;
+    // final endDateString = semData['endDate'] as String?;
+    // final startDate = (startDateString != null && startDateString.isNotEmpty) ? DateTime.parse(startDateString) : DateTime.now();
+    // final endDate = (endDateString != null && endDateString.isNotEmpty) ? DateTime.parse(endDateString) : DateTime.now().add(const Duration(days: 120));
 
     final term = ActiveTerm(
         academicYearId: yearDoc.id,
@@ -682,7 +912,7 @@ class FirestoreAttendanceService implements AttendanceService {
   String _combineName(Map<String, dynamic> data, {required String fallback}) {
     final f = _strOrNull(data['firstName']);
     final l = _strOrNull(data['lastName']);
-    final combined = [f, l].where((n) => n != null).join(' ');
+    final combined = [l, f].where((n) => n != null).join(', ');
     return combined.isNotEmpty ? combined : (_strOrNull(data['name']) ?? fallback);
   }
 

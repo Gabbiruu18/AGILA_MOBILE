@@ -24,7 +24,6 @@ class SettingsService {
     await p.setString(_soundKey, value);
   }
 
-  // --- ADDED: Notification Preference Methods ---
   Future<bool> getNotificationStatus(String uid, String role) async {
     final doc = await firestore.collection('users').doc(role).collection('accounts').doc(uid).get();
     if (doc.exists) {
@@ -43,7 +42,6 @@ class SettingsService {
         .doc(uid)
         .update({'notificationsEnabled': enabled});
   }
-  // --- END ADDED ---
 
   // --- Biometrics Methods ---
   Future<bool> getBiometricStatus(String uid) async {
