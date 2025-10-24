@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:project_agila/Screens/UI_Screen/notification.dart';
+import 'package:project_agila/Service_Modules/Notification/notification.dart';
 import 'package:project_agila/Service_Modules/Home/home_controller.dart';
 import 'package:project_agila/Service_Modules/Home/home_UI.dart';
 

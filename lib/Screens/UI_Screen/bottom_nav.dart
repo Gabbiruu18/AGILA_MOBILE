@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:project_agila/Screens/UI_Screen/home.dart';
-import 'package:project_agila/Screens/UI_Screen/profile.dart';
+import 'package:project_agila/Service_Modules/Home/home.dart';
+import 'package:project_agila/Service_Modules/Profile/profile.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:project_agila/Screens/UI_Screen/request.dart';
-import 'package:project_agila/Screens/UI_Screen/attendance.dart';
-import 'package:project_agila/Screens/UI_Screen/schedule.dart';
+import 'package:project_agila/Service_Modules/Request/request.dart';
+import 'package:project_agila/Service_Modules/Attendance/attendance.dart';
+import 'package:project_agila/Service_Modules/Schedule/schedule.dart';
 
 class MainLayout extends StatefulWidget {
   final String role;

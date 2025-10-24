@@ -59,12 +59,17 @@ class HomeService {
     return noteRef.set({'text': 'Tap to write notes'});
   }
 
+  // --- THIS IS THE FIX ---
+  // It now points to the user's personal notifications subcollection.
   Stream<int> streamUnreadCount({
     required String role,
     required String uid,
   }) {
-    final q = _db.collection('notifications').where('toRole', isEqualTo: role).where('toUid', isEqualTo: uid).where('read', isEqualTo: false);
-    return q.snapshots().map((s) => s.size);
+    final notificationsCollection = _userDoc(role: role, uid: uid)
+        .collection('notifications')
+        .where('read', isEqualTo: false); // We only need to filter by 'read' status now
+
+    return notificationsCollection.snapshots().map((snapshot) => snapshot.size);
   }
 
   // ============================ ACADEMIC PATH (IDs) ============================

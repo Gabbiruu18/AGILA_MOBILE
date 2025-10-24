@@ -5,7 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:project_agila/Screens/MainScreens/opening.dart';
 import 'package:project_agila/Screens/MainScreens/login.dart';
 import 'package:project_agila/Screens/MainScreens/quick_login.dart';
-import 'package:project_agila/Screens/UI_Screen/home.dart';
+import 'package:project_agila/Service_Modules/Home/home.dart';
 import 'package:project_agila/Screens/Theme/agila_theme.dart';
 import 'package:project_agila/Screens/Theme/theme_controller.dart';
 import 'package:project_agila/Screens/Theme/theme_scope.dart';
@@ -13,6 +13,8 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
+import 'Service_Modules/Notification/notification_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
@@ -114,6 +116,7 @@ Future<void> main() async {
     appleProvider: AppleProvider.debug,
   );
 
+  await NotificationService().init();
   await requestPermissions();
   final themeCtrl = ThemeController();
   await themeCtrl.load();

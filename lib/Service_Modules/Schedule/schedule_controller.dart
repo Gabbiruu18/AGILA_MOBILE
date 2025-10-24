@@ -301,9 +301,6 @@ class ScheduleController extends ChangeNotifier {
         date: _state.anchor,
       );
 
-      debugPrint('[FILTER] Filtering for status: ${status.name}');
-      debugPrint('[FILTER] Found ${sessions.length} matching sessions');
-
       for (final session in sessions) {
         debugPrint('[FILTER] Matching session: ${session.subject}');
       }

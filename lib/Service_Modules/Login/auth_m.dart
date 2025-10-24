@@ -6,7 +6,6 @@ import 'package:pinput/pinput.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
 import 'package:project_agila/Service_Modules/Login/biometric_util.dart';
-import 'package:local_auth/local_auth.dart';
 
 class AuthServices {
   // This function gets the device's token and saves it to Firestore.
@@ -111,94 +110,67 @@ class AuthServices {
 
       if (userData == null || role == null) throw Exception("User data or role not found in Firestore.");
 
-      // Save FCM token only after we have the user role and if "Remember Me" is checked
-      await _getAndSaveFCMToken(role, uid);
-
       final prefs = await SharedPreferences.getInstance();
-
-      bool faceRegistered = userData['faceRegistered'] ?? false;
-      bool hasBeenNotified = prefs.getBool('face_reg_notified_for_uid_$uid') ?? false;
-
-      if (!faceRegistered && !hasBeenNotified) {
-        String authority = "MIS";
-        if (context.mounted) {
-          await showDialog(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text("Facial Registration Incomplete"),
-              content: Text("Your account is not yet registered for facial recognition. Please see $authority to complete your setup."),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-          await prefs.setBool('face_reg_notified_for_uid_$uid', true);
-        }
-      }
-
+      await prefs.setBool('rememberMe', rememberMe);
       if (rememberMe) {
-        await prefs.setBool('rememberMe', true);
         await prefs.setString('rememberedEmail', email);
         await prefs.setString('rememberedUid', uid);
       } else {
-        await prefs.remove('rememberMe');
         await prefs.remove('rememberedEmail');
         await prefs.remove('rememberedUid');
-        await prefs.remove('passcode_enabled_for_uid_$uid');
-        await prefs.remove('biometric_enabled_for_uid_$uid');
       }
 
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => MainLayout(role: role!, name: '${userData?['firstName'] ?? ''} ${userData?['lastName'] ?? ''}', uid: uid, faceRegistered: faceRegistered, academicYearId: '', acadYear: '', semesterId: '', semesterName: '', firstName: '', lastName: '')));
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Welcome, ${user.email}! Login Successful")));
+      // Save FCM token only after we have the user role and if "Remember Me" is checked
+      await _getAndSaveFCMToken(role, uid);
+
+      bool passcodeSetupSkipped = prefs.getBool('passcode_setup_skipped_for_uid_$uid') ?? false;
+      bool passcodeEnabled = prefs.getBool('passcode_enabled_for_uid_$uid') ?? false;
+      bool hasPasscodeInFirestore = userData.containsKey('passcode') && (userData['passcode'] as String).isNotEmpty;
+
+
       if (!context.mounted) return;
 
-      final hasPasscode = userData.containsKey('passcode') && (userData['passcode'] as String? ?? '').isNotEmpty;
-      final passcodeSetupSkipped = prefs.getBool('passcode_setup_skipped_for_uid_$uid') ?? false;
+      if (userData['faceRegistered'] == true) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => MainLayout(
+              role: role!,
+              name: '${userData!['firstName'] ?? ''} ${userData['lastName'] ?? ''}',
+              uid: uid,
+              academicYearId: userData['academicYearId'] ?? '',
+              acadYear: userData['acadYear'] ?? '',
+              faceRegistered: userData['faceRegistered'] ?? false,
+              firstName: userData['firstName'] ?? '',
+              lastName: userData['lastName'] ?? '',
+              semesterId: userData['semesterId'] ?? '',
+              semesterName: userData['semesterName'] ?? '',
+            ),
+          ),
+        );
+      } else {
+        await _promptFaceIDSetup(context, uid, role);
+      }
 
-      if (!hasPasscode && !passcodeSetupSkipped) {
+      if (!passcodeSetupSkipped && !passcodeEnabled && !hasPasscodeInFirestore) {
+        if (!context.mounted) return;
         await _promptPinSetup(context, uid, role);
       }
 
-      final hasBiometrics = prefs.getBool('biometric_enabled_for_uid_$uid') ?? false;
-      final biometricSetupSkipped = prefs.getBool('biometric_setup_skipped_for_uid_$uid') ?? false;
-      final canCheckBiometrics = await BiometricUtil.checkBiometricAvailability();
-
-      if (!hasBiometrics && !biometricSetupSkipped && canCheckBiometrics) {
-        debugPrint('Checking for biometric registration eligibility');
-
-        if (context.mounted) {
-          await showDialog(
-            context: context,
-            builder: (dialogContext) => AlertDialog(
-              title: const Text("Fingerprint Login Available"),
-              content: const Text("You can enable fingerprint authentication for faster login through the Settings menu."),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text("OK"),
-                ),
-              ],
-            ),
-          );
-
-          // Mark that the user has been notified about biometrics
-          await prefs.setBool('biometric_setup_skipped_for_uid_$uid', true);
-        }
-
-      }
-
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Successful! Welcome, ${userData['firstName']}.")));
     } on FirebaseAuthException catch (e) {
       String message = "Login Failed: An unknown error occurred.";
       if (e.code == 'user-not-found' || e.code == 'invalid-email') {
         message = "Login Failed: No user found with that email.";
-      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') message = "Login Failed: Incorrect email or password.";
-      else if (e.code == 'network-request-failed') message = "Login Failed: Please check your network connection.";
+      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+        message = "Login Failed: Incorrect email or password.";
+      } else if (e.code == 'network-request-failed') {
+        message = "Login Failed: Please check your network connection.";
+      }
       if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } catch (e) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: An unexpected error occurred.")));
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: An unexpected error occurred. ${e.toString()}")));
     }
   }
 
@@ -240,10 +212,11 @@ class AuthServices {
     final defaultPinTheme = PinTheme(
       width: 48,
       height: 52,
-      textStyle: TextStyle(fontSize: 22, color: cs.onSurface),
+      textStyle: TextStyle(fontSize: 20, color: cs.onSurface, fontWeight: FontWeight.w600),
       decoration: BoxDecoration(
-        color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
+        color: cs.surface,
+        border: Border.all(color: cs.outline),
+        borderRadius: BorderRadius.circular(8),
       ),
     );
 
@@ -251,23 +224,17 @@ class AuthServices {
       context: context,
       barrierDismissible: false,
       builder: (dialogContext) => AlertDialog(
-        title: const Text("Set Quick Login Passcode"),
+        title: const Text("Setup Passcode"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text("Set a 6-digit passcode for faster login on any device."),
-            const SizedBox(height: 24),
+            const Text("For quick login, please set up a 6-digit passcode."),
+            const SizedBox(height: 16),
             Pinput(
               controller: pinController,
               length: 6,
-              autofocus: true,
-              obscureText: true,
               defaultPinTheme: defaultPinTheme,
-              focusedPinTheme: defaultPinTheme.copyWith(
-                decoration: defaultPinTheme.decoration!.copyWith(
-                  border: Border.all(color: cs.primary, width: 2),
-                ),
-              ),
+              focusedPinTheme: defaultPinTheme.copyWith(decoration: defaultPinTheme.decoration!.copyWith(border: Border.all(color: cs.primary, width: 2))),
             ),
           ],
         ),
@@ -291,9 +258,13 @@ class AuthServices {
                 await prefs.remove('passcode_setup_skipped_for_uid_$uid');
 
                 Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passcode saved successfully!")));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passcode saved successfully!")));
+                }
               } else {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passcode must be 6 digits.")));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Passcode must be 6 digits.")));
+                }
               }
             },
             child: const Text("Save"),
@@ -302,4 +273,38 @@ class AuthServices {
       ),
     );
   }
+}
+
+Future<void> _promptFaceIDSetup(BuildContext context, String uid, String role) async {
+  final canAuthenticate = await BiometricUtil.checkBiometricAvailability();
+  if (!canAuthenticate) return;
+
+  if(!context.mounted) return;
+  await showDialog(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text("Enable Biometric Login"),
+      content: const Text("Would you like to enable biometric login for faster access?"),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text("No"),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final success = await BiometricUtil.authenticateWithFingerprint(context);
+            if (success) {
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.setBool('biometric_enabled_for_uid_$uid', true);
+              Navigator.pop(dialogContext);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Biometric login enabled!")));
+              }
+            }
+          },
+          child: const Text("Yes"),
+        ),
+      ],
+    ),
+  );
 }
