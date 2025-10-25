@@ -127,10 +127,21 @@ class AuthServices {
       bool passcodeEnabled = prefs.getBool('passcode_enabled_for_uid_$uid') ?? false;
       bool hasPasscodeInFirestore = userData.containsKey('passcode') && (userData['passcode'] as String).isNotEmpty;
 
+      // Show SnackBar for successful login first
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Successful! Welcome, ${userData['firstName']}.")));
+      }
 
-      if (!context.mounted) return;
+      // Then, handle the pin setup prompt if necessary
+      if (!passcodeSetupSkipped && !passcodeEnabled && !hasPasscodeInFirestore) {
+        if (context.mounted) {
+          await _promptPinSetup(context, uid, role);
+        }
+      }
 
-      if (userData['faceRegistered'] == true) {
+      // Finally, navigate to the main layout. This ensures navigation happens
+      // after all dialogs are handled and the context is still valid.
+      if (context.mounted) {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -148,17 +159,8 @@ class AuthServices {
             ),
           ),
         );
-      } else {
-        await _promptFaceIDSetup(context, uid, role);
       }
 
-      if (!passcodeSetupSkipped && !passcodeEnabled && !hasPasscodeInFirestore) {
-        if (!context.mounted) return;
-        await _promptPinSetup(context, uid, role);
-      }
-
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Successful! Welcome, ${userData['firstName']}.")));
     } on FirebaseAuthException catch (e) {
       String message = "Login Failed: An unknown error occurred.";
       if (e.code == 'user-not-found' || e.code == 'invalid-email') {

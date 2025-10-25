@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:project_agila/Screens/UI_Screen/bottom_nav.dart';
+import '../../Service_Modules/Login/auth_m.dart';
 import '../../Service_Modules/Login/biometric_util.dart';
 import 'terms.dart';
 
@@ -123,13 +124,43 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     }
   }
 
-  Future<void> _clearRememberedUser() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('rememberMe', false);
-    await prefs.remove('rememberedEmail');
-    await prefs.remove('rememberedUid');
+  Future<void> _handleSwitchAccount() async {
+    if (_isLoading || rememberedUid == null) return;
 
-    if (mounted) Navigator.pushReplacementNamed(context, '/');
+    setState(() => _isLoading = true);
+
+    try {
+      // We need to find the user's role to properly log them out.
+      const roles = ['student', 'teacher', 'program_head'];
+      String? userRole;
+      for (final role in roles) {
+        final doc = await FirebaseFirestore.instance.collection('users').doc(role).collection('accounts').doc(rememberedUid!).get();
+        if (doc.exists) {
+          userRole = role;
+          break;
+        }
+      }
+
+      if (userRole != null && mounted) {
+        // Call the proper logout function which handles everything
+        await AuthServices.logout(context, userRole, rememberedUid!);
+      } else {
+        // Fallback in case user role isn't found (clears local data and navigates)
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('rememberMe');
+        await prefs.remove('rememberedEmail');
+        await prefs.remove('rememberedUid');
+        if (mounted) Navigator.pushReplacementNamed(context, '/');
+      }
+    } catch (e) {
+      debugPrint("Error switching account: $e");
+      // Ensure user is still navigated away on error
+      if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
   }
 
   Future<void> _biometricLogin() async {
@@ -272,7 +303,8 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Quick login failed: ${e.toString()}")));
-      await _clearRememberedUser();
+      // On failure, perform a full logout to force a fresh login
+      await _handleSwitchAccount();
     } finally {
       if (mounted) {
         pinController.clear();
@@ -331,7 +363,7 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
                     child: Text(rememberedEmail ?? 'No email found', textAlign: TextAlign.center, style: GoogleFonts.poppins(fontSize: 13)),
                   ),
                   const SizedBox(height: 10),
-                  TextButton(onPressed: _clearRememberedUser, child: Text('Switch Account', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w700))),
+                  TextButton(onPressed: _handleSwitchAccount, child: Text('Switch Account', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontSize: 14, fontWeight: FontWeight.w700))),
                   const SizedBox(height: 20),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,

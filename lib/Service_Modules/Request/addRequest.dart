@@ -160,17 +160,20 @@ class _AddRequestModalState extends State<AddRequestModal> {
   Future<void> _loadTeachers() async {
     if (!mounted) return;
     setState(() => _isLoadingTeachers = true);
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .doc('teacher')
-        .collection('accounts')
-        .get();
+    final List<String> names = [];
+    for (final role in ['program_head', 'teacher']) {
+      final snapshot = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(role)
+          .collection('accounts')
+          .get();
+      names.addAll(snapshot.docs.map((doc) {
+        final data = doc.data();
+        return '${_capitalizeRole(role)}: ${data['firstName']} ${data['lastName']}'.trim();
+      }));
+    }
     if (!mounted) return;
     setState(() {
-      _teacherNames = snapshot.docs.map((doc) {
-        final data = doc.data();
-        return '${data['firstName']} ${data['lastName']}'.trim();
-      }).toList();
       _isLoadingTeachers = false;
     });
   }
@@ -179,7 +182,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
     if (!mounted) return;
     setState(() => _isLoadingAdmins = true);
     final List<String> names = [];
-    for (final role in ['program_head', 'academic_head', 'admin']) {
+    for (final role in ['program_head', 'teacher']) {
       final snap = await FirebaseFirestore.instance
           .collection('users')
           .doc(role)
@@ -192,7 +195,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
     }
     if (!mounted) return;
     setState(() {
-      _adminNames = names;
       _isLoadingAdmins = false;
     });
   }

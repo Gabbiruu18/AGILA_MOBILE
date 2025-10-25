@@ -10,7 +10,7 @@ class OpeningScreen extends StatefulWidget {
 }
 
 class OpeningScreenState extends State<OpeningScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   static const _assetPath = 'assets/images/agila_opening.png';
@@ -18,19 +18,10 @@ class OpeningScreenState extends State<OpeningScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2));
     _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
     _controller.forward();
     _navigate();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      _navigate();
-    }
   }
 
   Future<bool> _checkFirestoreForPasscode(String uid) async {
@@ -95,7 +86,6 @@ class OpeningScreenState extends State<OpeningScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }

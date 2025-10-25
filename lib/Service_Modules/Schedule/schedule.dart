@@ -135,46 +135,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showSubjectDetails(SubjectTotals item) {
-    // Find all sessions for this subject and room type
-    final sessionsForSubject = ctrl.state.monthlyDetails
-        .where((s) => s.subject == item.subjectDisplay && s.roomType == item.roomType)
-        .toList();
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => MonthlyDetailsPanel(
+        item: item,
+        controller: ctrl,
+      ),
+    );
+  }
 
-    if (sessionsForSubject.isNotEmpty) {
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text("${item.subjectDisplay} - ${item.roomType.toUpperCase()}"),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView.builder(
-              shrinkWrap: true,
-              itemCount: sessionsForSubject.length,
-              itemBuilder: (context, index) {
-                final session = sessionsForSubject[index];
-                return ListTile(
-                  title: Text("Day ${session.weekday}"),
-                  subtitle: Text(fmtRange(session.startMinutes, session.endMinutes)),
-                  leading: CircleAvatar(
-                    backgroundColor: statusBg(session.status),
-                    foregroundColor: statusFg(session.status),
-                    child: Icon(_getStatusIcon(session.status)),
-                  ),
-                  trailing: Text(statusText(session.status)),
-                  onTap: () => _viewSessionDetails(session),
-                );
-              },
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
-    }
+  void _showWeeklySubjectDetails(SubjectWeekItem item) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => WeeklyDetailsPanel(
+        item: item,
+        controller: ctrl,
+      ),
+    );
   }
 
   IconData _getStatusIcon(AttendanceStatus status) {
@@ -417,22 +398,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   const SizedBox(height: 12),
                   WeeklyList(
                     items: ctrl.state.weeklyItems,
-                    onItemTap: (item) {
-                      // Show subject details for the whole week
-                      showDialog(
-                        context: context,
-                        builder: (context) => AlertDialog(
-                          title: Text(item.subjectDisplay),
-                          content: Text("Total attendance: ${item.attended}/${item.total}"),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(context).pop(),
-                              child: const Text('Close'),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
+                    onItemTap: _showWeeklySubjectDetails,
                     onStatusTap: _showWeeklyStatusDetails,
                   ),
                 ] else ...[

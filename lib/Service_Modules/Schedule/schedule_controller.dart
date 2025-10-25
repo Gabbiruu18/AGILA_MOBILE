@@ -133,7 +133,6 @@ class ScheduleState {
     error: null,
     statusCounts: const AttendanceStatusCounts(),
     filteredSessions: null,
-    selectedStatus: null,
     weeklyDetails: const [],
     monthlyDetails: const [],
   );
@@ -285,7 +284,7 @@ class ScheduleController extends ChangeNotifier {
   }
 
   String _getSubjectDisplayKey(Session session) {
-    return '${session.subject} (${session.roomType})';
+    return session.subject;
   }
 
   // New method to filter sessions by attendance status
@@ -392,17 +391,20 @@ class ScheduleController extends ChangeNotifier {
           ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       } else if (state.mode == ViewMode.weekly) {
         final bySubject = <String, Map<int, Map<String, Session>>>{};
+        final allSessionsForPeriod = sessionsByDate.values.expand((s) => s).toList();
+        weeklyDetails = allSessionsForPeriod;
 
-        sessionsByDate.forEach((date, sessions) {
-          if (date.weekday > 5) return;
-          for (final s in sessions) {
-            final subject = s.subject; // Use just the subject name without room type
-            bySubject
-                .putIfAbsent(subject, () => {})
-                .putIfAbsent(date.weekday, () => {})
-            [s.roomType] = s;
-          }
-        });
+
+        for (final s in allSessionsForPeriod) {
+          final weekday = s.weekday; // Use the session's own weekday
+          if (weekday > 5) continue; // Skip weekends
+          final subject = s.subject;
+          bySubject
+              .putIfAbsent(subject, () => {})
+              .putIfAbsent(weekday, () => {})
+          [s.roomType] = s;
+        }
+
 
         weeklyItems = bySubject.entries.map((entry) {
           final sessionStatuses = <int, Map<String, AttendanceStatus>>{};
@@ -414,18 +416,17 @@ class ScheduleController extends ChangeNotifier {
             for (final roomTypeEntry in weekdayEntry.value.entries) {
               final session = roomTypeEntry.value;
 
-              // Initialize the weekday map if needed
               sessionStatuses.putIfAbsent(weekday, () => {});
-
-              // Add the status for this room type
               sessionStatuses[weekday]![session.roomType] = session.status;
 
-              // Count attended and total
               if (session.status == AttendanceStatus.present ||
+                  session.status == AttendanceStatus.late ||
                   session.status == AttendanceStatus.excused) {
                 attendedCount++;
               }
-              totalCount++;
+              if (session.status != AttendanceStatus.none && session.status != AttendanceStatus.scheduled) {
+                totalCount++;
+              }
             }
           }
 
@@ -436,18 +437,17 @@ class ScheduleController extends ChangeNotifier {
             total: totalCount,
           );
         }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-
-        // Store all sessions for detailed view
-        weeklyDetails = sessionsByDate.values.expand((s) => s).toList();
       } else if (state.mode == ViewMode.monthly) {
+        final allSessionsForPeriod = sessionsByDate.values.expand((s) => s).toList();
+        monthlyDetails = allSessionsForPeriod;
+
         final map = <String, Map<String, List<Session>>>{};
-        sessionsByDate.values.expand((s) => s).forEach((s) {
-          // Group by subject and room type
+        for (final s in allSessionsForPeriod) {
           map
               .putIfAbsent(s.subject, () => {})
               .putIfAbsent(s.roomType, () => [])
               .add(s);
-        });
+        }
 
         final totals = <SubjectTotals>[];
         for (final subjectEntry in map.entries) {
@@ -455,14 +455,19 @@ class ScheduleController extends ChangeNotifier {
             final sessions = roomTypeEntry.value;
             final attendedCount = sessions.where((s) =>
             s.status == AttendanceStatus.present ||
+                s.status == AttendanceStatus.late ||
                 s.status == AttendanceStatus.excused
+            ).length;
+
+            final totalCount = sessions.where((s) =>
+            s.status != AttendanceStatus.none && s.status != AttendanceStatus.scheduled
             ).length;
 
             totals.add(SubjectTotals(
               subjectDisplay: subjectEntry.key,
               roomType: roomTypeEntry.key,
               attended: attendedCount,
-              total: sessions.length,
+              total: totalCount,
             ));
           }
         }
@@ -473,9 +478,6 @@ class ScheduleController extends ChangeNotifier {
             if (subjectCompare != 0) return subjectCompare;
             return a.roomType.compareTo(b.roomType);
           });
-
-        // Store all sessions for detailed view
-        monthlyDetails = sessionsByDate.values.expand((s) => s).toList();
       }
 
       _state = _state.copyWith(
@@ -512,5 +514,83 @@ class ScheduleController extends ChangeNotifier {
 
   Future<List<RoomSchedule>> viewRoomSchedule({required String roomName, required DateTime forDate}) {
     return service.fetchSchedulesForRoom(roomName: roomName, forDate: forDate);
+  }
+
+  Future<(List<SectionStudent>, Map<String, List<StudentAttendanceRecord>>)> getStudentWeeklyAttendanceForSubject(String subjectName) async {
+    final studentMap = <String, SectionStudent>{};
+    final scheduleIds = <String>{};
+
+    for (var session in state.weeklyDetails) {
+      if (session.subject == subjectName) {
+        scheduleIds.add(session.id);
+      }
+    }
+
+    // Add a guard clause here
+    if (scheduleIds.isEmpty) {
+      return (<SectionStudent>[], <String, List<StudentAttendanceRecord>>{});
+    }
+
+    for (var scheduleId in scheduleIds) {
+      final students = await viewSectionRoster("", scheduleId);
+      for (var student in students) {
+        studentMap.putIfAbsent(student.uid, () => student);
+      }
+    }
+
+    final studentList = studentMap.values.toList();
+    final studentUids = studentList.map((s) => s.uid).toList();
+
+    if (studentUids.isEmpty) {
+      return (studentList, <String, List<StudentAttendanceRecord>>{});
+    }
+
+    final attendanceData = await (service as FirestoreScheduleService).fetchStudentAttendanceForDateRange(
+      studentUids: studentUids,
+      scheduleIds: scheduleIds.toList(),
+      start: _startOfWeek(state.anchor),
+      end: _endOfWeek(state.anchor),
+    );
+
+    return (studentList, attendanceData);
+  }
+
+  Future<(List<SectionStudent>, Map<String, List<StudentAttendanceRecord>>)> getStudentMonthlyAttendanceForSubject(String subjectName, String roomType) async {
+    final studentMap = <String, SectionStudent>{};
+    final scheduleIds = <String>{};
+
+    for (var session in state.monthlyDetails) {
+      if (session.subject == subjectName && session.roomType == roomType) {
+        scheduleIds.add(session.id);
+      }
+    }
+
+    // Add a guard clause here
+    if (scheduleIds.isEmpty) {
+      return (<SectionStudent>[], <String, List<StudentAttendanceRecord>>{});
+    }
+
+    for (var scheduleId in scheduleIds) {
+      final students = await viewSectionRoster("", scheduleId);
+      for (var student in students) {
+        studentMap.putIfAbsent(student.uid, () => student);
+      }
+    }
+
+    final studentList = studentMap.values.toList();
+    final studentUids = studentList.map((s) => s.uid).toList();
+
+    if (studentUids.isEmpty) {
+      return (studentList, <String, List<StudentAttendanceRecord>>{});
+    }
+
+    final attendanceData = await (service as FirestoreScheduleService).fetchStudentAttendanceForDateRange(
+      studentUids: studentUids,
+      scheduleIds: scheduleIds.toList(),
+      start: _startOfMonth(state.anchor),
+      end: _endOfMonth(state.anchor),
+    );
+
+    return (studentList, attendanceData);
   }
 }

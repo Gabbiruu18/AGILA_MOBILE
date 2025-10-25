@@ -359,75 +359,6 @@ class FirestoreAttendanceService implements AttendanceService {
           }
         }
 
-        // Check if we need to mark the student as absent for existing attendance sessions
-        if (!foundAttendanceRecord && matchingAttendanceDocs.isNotEmpty) {
-          // Get the actual date of the attendance session from the document
-          final attendanceDoc = matchingAttendanceDocs.first;
-          final dateStr = _strOrNull(attendanceDoc.data()?['dateStr']);
-
-          if (dateStr != null) {
-            try {
-              // Parse the date from the attendance session
-              final sessionDate = DateTime.parse(dateStr);
-
-              // Calculate the session end time using the date from the attendance document
-              // and the end time from the schedule
-              final endTimeMinutes = session.endMinutes;
-              final endHour = endTimeMinutes ~/ 60;
-              final endMinute = endTimeMinutes % 60;
-
-              final sessionEndTime = DateTime(
-                  sessionDate.year,
-                  sessionDate.month,
-                  sessionDate.day,
-                  endHour,
-                  endMinute
-              );
-
-              debugPrint('[ATTENDANCE DEBUG] Session end time: $sessionEndTime, Current time: $now');
-
-              // If session end time has passed and no attendance record found
-              if (now.isAfter(sessionEndTime)) {
-                debugPrint('[ATTENDANCE DEBUG] ⚠️ Session has ended with no attendance record. Marking absent.');
-
-                // Get the attendance session document ID
-                final attendanceSessionId = attendanceDoc.id;
-
-                // Mark student as absent
-                await markStudentAbsent(
-                  attendanceSessionId: attendanceSessionId,
-                  studentUid: userId,
-                );
-
-                // Update the session with absent status
-                enrichedSession = Session(
-                  id: session.id,
-                  subject: session.subject,
-                  section: session.section,
-                  room: session.room,
-                  roomType: session.roomType,
-                  weekday: session.weekday,
-                  startMinutes: session.startMinutes,
-                  endMinutes: session.endMinutes,
-                  colorHex: session.colorHex,
-                  instructorId: session.instructorId,
-                  instructorName: session.instructorName,
-                  status: AttendanceStatus.none, // Change from absent to done
-                  source: "System",
-                  updatedAt: now,
-                  studentId: userId,
-                );
-
-                matchesFound++;
-              } else {
-                debugPrint('[ATTENDANCE DEBUG] Session has not ended yet. Not marking absent.');
-              }
-            } catch (e) {
-              debugPrint('[ATTENDANCE DEBUG] Error processing date for absence check: $e');
-            }
-          }
-        }
-
         // NEW: Check if session is past but no attendance session was created
         if (!foundAttendanceRecord && matchingAttendanceDocs.isEmpty) {
           try {
@@ -489,7 +420,6 @@ class FirestoreAttendanceService implements AttendanceService {
 
         enrichedSessions.add(enrichedSession);
       }
-
       debugPrint('[ATTENDANCE DEBUG] Enrichment complete. Found attendance data for $matchesFound out of ${sessions.length} sessions');
       debugPrint('[USER CHECK] SUMMARY: Found attendance data for $matchesFound out of ${sessions.length} sessions');
       debugPrint('[ATTENDANCE DEBUG] ======================================');
@@ -558,92 +488,6 @@ class FirestoreAttendanceService implements AttendanceService {
     return AttendanceStatus.scheduled;
   }
 
-
-
-
-
-  // Add this method to FirestoreAttendanceService class to mark students as absent
-  Future<void> markStudentAbsent({
-    required String attendanceSessionId,
-    required String studentUid,
-  }) async {
-    try {
-      debugPrint('[ATTENDANCE] Marking student $studentUid as absent for session $attendanceSessionId');
-
-      // Reference to the student document in the attendance session
-      final studentRef = _db
-          .collection('attendance_sessions')
-          .doc(attendanceSessionId)
-          .collection('students')
-          .doc(studentUid);
-
-      // Check if document already exists - with more logging
-      final docSnap = await studentRef.get();
-      debugPrint('[ATTENDANCE] Document exists check: ${docSnap.exists}');
-      if (docSnap.exists) {
-        debugPrint('[ATTENDANCE] Student attendance record already exists, skipping');
-        return;
-      }
-
-      // Add a retry mechanism for student document retrieval
-      Map<String, dynamic>? studentData; // FIXED: Changed from StudentData? to Map<String, dynamic>?
-      int retryCount = 0;
-      while (studentData == null && retryCount < 3) {
-        try {
-          final studentDoc = await _db
-              .collection('users')
-              .doc('student')
-              .collection('accounts')
-              .doc(studentUid)
-              .get();
-
-          if (studentDoc.exists && studentDoc.data() != null) {
-            studentData = studentDoc.data();
-            break;
-          }
-          retryCount++;
-        } catch (e) {
-          debugPrint('[ATTENDANCE] Error on attempt $retryCount: $e');
-          retryCount++;
-        }
-      }
-
-      if (studentData == null) {
-        // Use minimal data if student document not found
-        debugPrint('[ATTENDANCE] Student document not found, using minimal data');
-        await studentRef.set({
-          'status': 'Absent',
-          'source': 'System',
-          'updatedAt': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      } else {
-        // Normal case with full student data
-        final firstName = _strOrNull(studentData['firstName']) ?? '';
-        final lastName = _strOrNull(studentData['lastName']) ?? '';
-        final fullName = '$firstName $lastName'.trim();
-        final studentNumber = _strOrNull(studentData['studentNumber']);
-        final academicStatus = _strOrNull(studentData['academicStatus']);
-        final studentId = _strOrNull(studentData['id']) ?? _strOrNull(studentData['userId']);
-
-        debugPrint('[ATTENDANCE] Creating absent record for $fullName (ID: $studentId)');
-        await studentRef.set({
-          'studentId': studentId,
-          'status': 'Absent',
-          'source': 'System',
-          'fullName': fullName,
-          'studentNo': studentNumber,
-          'academicStatus': academicStatus,
-          'updatedAt': FieldValue.serverTimestamp(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-      }
-
-      debugPrint('[ATTENDANCE] Successfully marked student as absent');
-    } catch (e) {
-      debugPrint('[ATTENDANCE] Error marking student as absent: $e');
-    }
-  }
 
   @override
   Future<List<Session>> getSessionsByStatus({

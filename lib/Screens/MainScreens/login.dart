@@ -18,29 +18,46 @@ class LoginScreenState extends State<LoginScreen> {
   bool _termsAccepted = false;
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _isCheckingTerms = true; // Added state to manage initial check
 
   static const _assetPath = 'assets/images/agila_opening.png';
 
   @override
   void initState() {
     super.initState();
-    _loadInitialState();
+    _checkTermsAndShowDialog();
   }
 
-  Future<void> _loadInitialState() async {
+  Future<void> _checkTermsAndShowDialog() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    final termsAccepted = prefs.getBool('termsAccepted') ?? false;
     setState(() {
-      _termsAccepted = prefs.getBool('termsAccepted') ?? false;
+      _termsAccepted = termsAccepted;
     });
 
-    if (!_termsAccepted) {
-      // Use a post-frame callback to safely show a dialog after the first build.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showTermsDialog();
-        }
-      });
+    if (!termsAccepted) {
+      // Show the dialog before the main UI is shown.
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const TermsDialog(),
+      );
+      // After the dialog is accepted and closed, re-check the state.
+      final newTermsAccepted = prefs.getBool('termsAccepted') ?? false;
+      if (mounted) {
+        setState(() {
+          _termsAccepted = newTermsAccepted;
+          _isCheckingTerms = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isCheckingTerms = false;
+        });
+      }
     }
   }
 
@@ -49,9 +66,14 @@ class LoginScreenState extends State<LoginScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => const TermsDialog(),
-    ).then((_) {
+    ).then((_) async {
       // When dialog is closed, reload the terms acceptance state
-      _loadInitialState();
+      final prefs = await SharedPreferences.getInstance();
+      if(mounted) {
+        setState(() {
+          _termsAccepted = prefs.getBool('termsAccepted') ?? false;
+        });
+      }
     });
   }
 
@@ -66,6 +88,14 @@ class LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Show a loading indicator while checking terms status,
+    // so the main UI doesn't flash before the dialog appears.
+    if (_isCheckingTerms) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       body: Stack(
         children: [
