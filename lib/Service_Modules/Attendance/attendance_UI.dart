@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-// Import the shimmer package
 import 'package:intl/intl.dart';
 import 'attendance_service.dart';
 import 'attendance_controller.dart';
-// ============================ HELPERS (Copied for Independence) ============================
 
 String _d2(int n) => n.toString().padLeft(2, '0');
 String fmtTime(int minutes) {
@@ -30,13 +28,12 @@ BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
   );
 }
 
-// UPDATED: Now uses the AttendanceStatus enum
 Color statusBg(AttendanceStatus? st) {
   if (st == null) return Colors.grey.shade200;
   switch (st) {
-    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF); // Blue for scheduled
+    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF);
     case AttendanceStatus.present:   return const Color(0xFFDCF5E7);
-    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF); // Light blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF);
     case AttendanceStatus.late:      return const Color(0xFFFFF1CC);
     case AttendanceStatus.absent:    return const Color(0xFFFFE0E0);
     case AttendanceStatus.none:    return const Color(0xFFB2B2B2);
@@ -48,7 +45,7 @@ Color statusFg(AttendanceStatus? st) {
   switch (st) {
     case AttendanceStatus.scheduled: return const Color(0xFF0058CE);
     case AttendanceStatus.present:   return const Color(0xFF1E7E34);
-    case AttendanceStatus.excused:   return const Color(0xFF0096C7); // Blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFF0096C7);
     case AttendanceStatus.late:      return const Color(0xFF9A6B00);
     case AttendanceStatus.absent:    return const Color(0xFFB3261E);
     case AttendanceStatus.none:      return  Color(0xFF545353);
@@ -60,12 +57,6 @@ Color statusFg(AttendanceStatus? st) {
 
 String statusText(AttendanceStatus? st, {String? source}) {
   if (st == null) return "N/A";
-
-  // // Special case for "No attendance session created"
-  // if (st == AttendanceStatus.absent && source == "No attendance session created") {
-  //   return "Done";
-  // }
-
   return st.name[0].toUpperCase() + st.name.substring(1);
 }
 
@@ -142,7 +133,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onLabelTap;
   final VoidCallback onTodayTap;
-  // NEW: Pass the canShiftPrev boolean
   final bool showPrev;
   final bool showNext;
   final bool showTodayButton;
@@ -154,7 +144,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
     required this.onNext,
     required this.onLabelTap,
     required this.onTodayTap,
-    // NEW
     required this.showPrev,
     required this.showNext,
     required this.showTodayButton,
@@ -163,10 +152,8 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // This layout is more robust and prevents overflows.
     return Row(
       children: [
-        // Left-side widget (either the Today button or an empty box for balance)
         SizedBox(
           width: 90,
           child: showTodayButton
@@ -177,17 +164,14 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
               : null,
         ),
 
-        // The flexible center part that expands and shrinks
         Expanded(
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                // Use the new showPrev flag to enable/disable the button
                 onPressed: showPrev ? onPrev : null,
                 icon: Icon(Icons.chevron_left, color: showPrev ? cs.onSurface : cs.onSurface.withOpacity(0.38)),
               ),
-              // Make the label flexible to prevent overflow
               Flexible(
                 child: InkWell(
                   onTap: onLabelTap,
@@ -197,7 +181,7 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
                     child: Text(
                       label,
                       textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis, // Prevent long text from overflowing
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: cs.primary,
@@ -214,7 +198,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
           ),
         ),
 
-        // Right-side empty box to balance the layout
         const SizedBox(width: 90),
       ],
     );
@@ -258,7 +241,6 @@ class StatCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left side with icon and label
             Row(
               children: [
                 CircleAvatar(
@@ -276,11 +258,7 @@ class StatCard extends StatelessWidget {
                 ),
               ],
             ),
-
-            // Expanded space to push the number to the right
             const Spacer(),
-
-            // Right side with the count number
             Text(
               "$value",
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -329,8 +307,6 @@ class DailyListScheduleLike extends StatelessWidget {
     if (groups.isEmpty) {
       return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No classes scheduled for this day.")));
     }
-
-    // Flatten the groups into a single list of sessions
     final items = groups.expand((g) => g.sessions).toList();
     items.sort((a,b) => a.startMinutes.compareTo(b.startMinutes));
 
@@ -347,10 +323,8 @@ class DailyListScheduleLike extends StatelessWidget {
           section: session.section,
           room: session.room,
           timeLabel: fmtRange(session.startMinutes, session.endMinutes),
-
-          // UPDATED: Pass the status enum directly.
           status: session.status,
-          source: session.source, // Add this line
+          source: session.source,
 
           accentColor: _subjectAccent(session.subject),
           onViewDetails: () => onViewDetails(session),
@@ -405,8 +379,6 @@ class WeeklyList extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 10),
-
-                // Add a summary of attendance
                 Text(
                   "Attendance: ${item.attended}/${item.total}",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -415,15 +387,12 @@ class WeeklyList extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-
-                // Create a row for each room type
                 ...roomTypes.map((roomType) {
                   final statuses = item.getStatusesForRoomType(roomType);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
                       children: [
-                        // Room type label
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -438,10 +407,8 @@ class WeeklyList extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 8),
-
-                        // Status indicators for each day
                         ...List.generate(6, (dayIndex) {
-                          // Safely get the status, defaulting to null if out of bounds.
+
                           final status = (dayIndex < statuses.length) ? statuses[dayIndex] : null;
                           final weekday = dayIndex + 1;
 
@@ -502,7 +469,6 @@ class MonthlyList extends StatelessWidget {
       );
     }
 
-    // Group items by subject
     final bySubject = <String, List<SubjectTotals>>{};
     for (final item in items) {
       bySubject.putIfAbsent(item.subjectDisplay, () => []).add(item);
@@ -594,12 +560,11 @@ Color _subjectAccent(String subject) {
 }
 
 class TodayScheduleCard extends StatelessWidget {
-  // UPDATED: Simplified parameters.
   final String subject, roomType, section, room, timeLabel;
   final AttendanceStatus status;
   final Color accentColor;
   final VoidCallback? onViewDetails;
-  final String? source; // Add this field
+  final String? source;
 
 
   const TodayScheduleCard({
@@ -611,7 +576,7 @@ class TodayScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final sLabel = statusText(status, source: source); // Use the class field
+    final sLabel = statusText(status, source: source);
     final sBg = statusBg(status);
     final sFg = statusFg(status);
 
@@ -632,7 +597,6 @@ class TodayScheduleCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(children: [
-                      // UPDATED: Display subject name and room type
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -667,8 +631,6 @@ class TodayScheduleCard extends StatelessWidget {
   }
 }
 
-// ============================ PANEL UI WIDGETS (Standard Version) ============================
-
 class SessionDetailsPanel extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
@@ -698,7 +660,6 @@ class _SessionDetailsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get attendance status color and label
     final sBg = statusBg(session.status);
     final sFg = statusFg(session.status);
     final sLabel = statusText(session.status);
@@ -709,8 +670,6 @@ class _SessionDetailsContent extends StatelessWidget {
       children: [
         Text(session.section, style: Theme.of(context).textTheme.titleSmall),
         const Divider(height: 24),
-
-        // Special message for "No attendance session created" case
         if (session.source == "No attendance session created")
           Container(
             padding: const EdgeInsets.all(12),
@@ -733,8 +692,6 @@ class _SessionDetailsContent extends StatelessWidget {
               ],
             ),
           ),
-
-        // Attendance status chip
         if (session.status != AttendanceStatus.scheduled) ...[
           Row(
             children: [
@@ -768,8 +725,6 @@ class _SessionDetailsContent extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 8),
-
-          // Attendance details
           if (session.source != null && session.source != "No attendance session created")
             _kv(context, Icons.source, 'Source', session.source!),
           if (session.firstSeen != null)
@@ -890,7 +845,7 @@ class _InstructorDetailsContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        const SizedBox(height: 42), // Added top spacing
+        const SizedBox(height: 42),
         CircleAvatar(
           radius: 65,
           backgroundImage: details.photoURL != null ? NetworkImage(details.photoURL!) : null,
@@ -943,16 +898,12 @@ Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
   ]),
 );
 
-// ============================ SKELETON WIDGETS ============================
-// NEW: All of the following widgets are for the loading state.
-
 class _SkeletonBox extends StatelessWidget {
   final double? width;
   final double height;
   const _SkeletonBox({this.width, required this.height});
   @override
   Widget build(BuildContext context) {
-    // The color is now INSIDE the BoxDecoration, which is the correct way.
     return Container(
       width: width,
       height: height,

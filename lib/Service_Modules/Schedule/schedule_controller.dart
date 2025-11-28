@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'schedule_service.dart';
 
-// ============================ UI-SPECIFIC MODELS ============================
 
 enum ViewMode { daily, weekly, monthly }
 
@@ -13,7 +12,7 @@ class SubjectDayGroup {
 
 class SubjectWeekItem {
   final String subjectDisplay;
-  final Map<int, Map<String, AttendanceStatus>> sessionStatuses; // weekday -> roomType -> status
+  final Map<int, Map<String, AttendanceStatus>> sessionStatuses;
   final int attended;
   final int total;
 
@@ -24,7 +23,6 @@ class SubjectWeekItem {
     required this.total,
   });
 
-  // Helper method to get statuses for a specific room type
   List<AttendanceStatus?> getStatusesForRoomType(String roomType) {
     final statuses = List<AttendanceStatus?>.filled(5, null);
     for (int i = 1; i <= 5; i++) {
@@ -35,7 +33,6 @@ class SubjectWeekItem {
     return statuses;
   }
 
-  // Get all unique room types for this subject
   List<String> get roomTypes {
     final types = <String>{};
     for (final weekday in sessionStatuses.keys) {
@@ -71,7 +68,6 @@ class ScheduleState {
   final AttendanceStatusCounts statusCounts;
   final List<Session>? filteredSessions;
   final AttendanceStatus? selectedStatus;
-  // Fields to store detailed sessions for weekly and monthly views
   final List<Session> weeklyDetails;
   final List<Session> monthlyDetails;
 
@@ -140,8 +136,6 @@ class ScheduleState {
 
 class _NoChange<T> { const _NoChange(); }
 
-// ============================ CONTROLLER (HEAVILY UPDATED) ============================
-
 class ScheduleController extends ChangeNotifier {
   final ScheduleService service;
   final String uid;
@@ -152,7 +146,6 @@ class ScheduleController extends ChangeNotifier {
 
   ScheduleController({required this.service, required this.uid, required this.role});
 
-  // --- Date Helpers ---
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
   DateTime _startOfDay(DateTime d) => _dateOnly(d);
   DateTime _endOfDay(DateTime d) => _dateOnly(d).add(const Duration(days: 1)).subtract(const Duration(microseconds: 1));
@@ -163,12 +156,10 @@ class ScheduleController extends ChangeNotifier {
 
   bool get isToday => _dateOnly(state.anchor) == _dateOnly(DateTime.now());
 
-  // --- Navigation Logic ---
   bool get canShiftNext {
     final term = state.activeTerm;
-    if (term == null) return false; // Cannot shift if we don't know the term boundaries.
+    if (term == null) return false;
 
-    // final currentAnchor = _dateOnly(state.anchor);
     final termEnd = _dateOnly(term.endDate);
 
     final now = DateTime.now();
@@ -193,7 +184,6 @@ class ScheduleController extends ChangeNotifier {
     final term = state.activeTerm;
     if (term == null) return false;
 
-    // For Daily view: Allow viewing at least the past 30 days
     if (state.mode == ViewMode.daily) {
       final thirtyDaysAgo = _dateOnly(DateTime.now()).subtract(const Duration(days: 30));
       final earliestAllowed = _dateOnly(term.startDate).isAfter(thirtyDaysAgo)
@@ -211,11 +201,10 @@ class ScheduleController extends ChangeNotifier {
       case ViewMode.monthly:
         return _startOfMonth(state.anchor).isAfter(_startOfMonth(termStart));
       default:
-        return false; // Should not reach here
+        return false;
     }
   }
 
-  // --- State Mutators ---
   void setMode(ViewMode m) {
     _state = _state.copyWith(
         mode: m,
@@ -287,7 +276,6 @@ class ScheduleController extends ChangeNotifier {
     return session.subject;
   }
 
-  // New method to filter sessions by attendance status
   Future<void> filterByStatus(AttendanceStatus status) async {
     _state = _state.copyWith(loading: true);
     notifyListeners();
@@ -327,13 +315,11 @@ class ScheduleController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // --- Main Data Fetching ---
   Future<void> refresh() async {
     _state = _state.copyWith(loading: true, error: null);
     notifyListeners();
 
     try {
-      // We make a lightweight call to the service if the term isn't already in the state.
       final currentactiveTerm = _state.activeTerm ?? await service.getSessionsForRange(
         userId: uid, role: role, start: DateTime.now(), end: DateTime.now(),
       ).then((res) => res.$2);
@@ -348,7 +334,6 @@ class ScheduleController extends ChangeNotifier {
         userId: uid, role: role, start: start, end: end,
       );
 
-      // Calculate attendance status counts
       var statusCounts = const AttendanceStatusCounts();
       for (final sessions in sessionsByDate.values) {
         for (final session in sessions) {
@@ -396,8 +381,8 @@ class ScheduleController extends ChangeNotifier {
 
 
         for (final s in allSessionsForPeriod) {
-          final weekday = s.weekday; // Use the session's own weekday
-          if (weekday > 5) continue; // Skip weekends
+          final weekday = s.weekday;
+          if (weekday > 5) continue;
           final subject = s.subject;
           bySubject
               .putIfAbsent(subject, () => {})
@@ -503,7 +488,7 @@ class ScheduleController extends ChangeNotifier {
       dateStr: dateStr,
     );
   }
-  // --- Detail Fetching Methods ---
+
   Future<List<SectionStudent>> viewSectionRoster(String sectionName, String scheduleId) {
     return service.fetchStudentsForSection(sectionName: sectionName, scheduleId: scheduleId);
   }
@@ -526,7 +511,6 @@ class ScheduleController extends ChangeNotifier {
       }
     }
 
-    // Add a guard clause here
     if (scheduleIds.isEmpty) {
       return (<SectionStudent>[], <String, List<StudentAttendanceRecord>>{});
     }
@@ -565,7 +549,6 @@ class ScheduleController extends ChangeNotifier {
       }
     }
 
-    // Add a guard clause here
     if (scheduleIds.isEmpty) {
       return (<SectionStudent>[], <String, List<StudentAttendanceRecord>>{});
     }

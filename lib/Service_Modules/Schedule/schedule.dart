@@ -55,9 +55,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           }
           return ctrl.viewInstructorDetails(session.instructorId);
         },
-        // Pass the selected date from controller state
         selectedDate: ctrl.state.anchor,
-        // --- ADD THIS LINE ---
         activeTerm: ctrl.state.activeTerm,
       ),
     );
@@ -94,7 +92,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   void _showWeeklyStatusDetails(SubjectWeekItem item, String roomType, int weekday) {
-    // Find all sessions for this subject, room type, and weekday
     final sessionsForDay = ctrl.state.weeklyDetails
         .where((s) =>
     s.subject == item.subjectDisplay &&
@@ -173,41 +170,35 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final today = DateTime(now.year, now.month, now.day);
     final tomorrow = today.add(const Duration(days: 1));
 
-    // Calculate the earliest selectable date
     final thirtyDaysAgo = today.subtract(const Duration(days: 30));
     final termStart = ctrl.state.activeTerm?.startDate ?? DateTime(2020);
     final earliestDate = termStart.isAfter(thirtyDaysAgo) ? termStart : thirtyDaysAgo;
 
-    // Check if we're viewing tomorrow's date
     final viewingTomorrow = DateTime(
         ctrl.state.anchor.year,
         ctrl.state.anchor.month,
         ctrl.state.anchor.day
     ).isAtSameMomentAs(tomorrow);
 
-    // Set the date picker constraints
     final DateTime firstDate = earliestDate;
     final DateTime lastDate;
 
     if (viewingTomorrow) {
-      // If viewing tomorrow, only allow selecting tomorrow
       lastDate = tomorrow;
-      // Force initialDate to be tomorrow
       final initialDate = tomorrow;
 
       final selectedDate = await showDatePicker(
         context: context,
         initialDate: initialDate,
-        firstDate: initialDate, // Only tomorrow is selectable
-        lastDate: lastDate,     // Only tomorrow is selectable
-        selectableDayPredicate: (day) => day.isAtSameMomentAs(tomorrow), // Extra restriction
+        firstDate: initialDate,
+        lastDate: lastDate,
+        selectableDayPredicate: (day) => day.isAtSameMomentAs(tomorrow),
       );
 
       if (selectedDate != null) {
         ctrl.jumpToDate(selectedDate);
       }
     } else {
-      // For past/current dates, allow selecting from earliestDate up to today
       lastDate = today;
 
       final selectedDate = await showDatePicker(
@@ -309,7 +300,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // First row - Present and Late
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -337,7 +327,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
                       const SizedBox(height: 8),
 
-                      // Second row - Absent and Excused
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

@@ -1,11 +1,10 @@
-// Service_Modules/Profile/profile_UI.dart
 import 'package:flutter/material.dart';
 const kAgilaBlue = Color(0xFF0058CE);
 const kAgilaGold = Color(0xFFC88000);
 
 class PrimaryButton extends StatelessWidget {
   final String text;
-  final Color? color; // make optional
+  final Color? color;
   final VoidCallback onPressed;
   final EdgeInsetsGeometry padding;
   final BorderRadius radius;
@@ -33,7 +32,7 @@ class PrimaryButton extends StatelessWidget {
       child: Text(
         text,
         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: cs.onPrimary, // text for primary-colored button
+          color: cs.onPrimary,
           fontSize: 16,
         ),
       ),
@@ -51,7 +50,6 @@ class DetailsCard extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 24),
-      // no color: uses CardTheme.color (we set it to neutral in your theme)
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
         side: BorderSide(color: cs.outlineVariant.withOpacity(0.6), width: 1.2),
@@ -74,7 +72,6 @@ class InfoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
-      // color: cs.surface, // optional; CardTheme already supplies neutral surface
       margin: const EdgeInsets.symmetric(horizontal: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
@@ -90,7 +87,6 @@ class InfoCard extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 fontWeight: FontWeight.w600,
                 fontSize: 16,
-                // use primary if you want colored title that adapts per theme
                 color: cs.primary,
               ),
             ),
@@ -121,7 +117,6 @@ class ReadonlyTile extends StatelessWidget {
   }
 }
 
-/// Same visual as ReadonlyTile but with a trailing pencil to edit.
 class EditableTile extends StatelessWidget {
   final IconData icon;
   final String label;
@@ -189,8 +184,8 @@ class ProfileHeaderCard extends StatelessWidget {
   final String roleLabel;
   final String? subtitle;
   final VoidCallback onEditPhoto;
-  final String? imageUrl; // NEW: optional URL for the avatar
-  final Color? subtitleColor; // ✅ NEW
+  final String? imageUrl;
+  final Color? subtitleColor;
 
 
   const ProfileHeaderCard({
@@ -200,7 +195,7 @@ class ProfileHeaderCard extends StatelessWidget {
     required this.subtitle,
     required this.onEditPhoto,
     this.imageUrl,
-    this.subtitleColor, // ✅ NEW
+    this.subtitleColor,
 
 
   });
@@ -218,7 +213,6 @@ class ProfileHeaderCard extends StatelessWidget {
 
 
     return Card(
-      // color: cs.surface, // optional; let CardTheme handle it
       margin: const EdgeInsets.symmetric(horizontal: 16),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
@@ -250,7 +244,7 @@ class ProfileHeaderCard extends StatelessWidget {
                   top: -4,
                   right: -4,
                   child: Material(
-                    color: cs.surface, // not onPrimary; matches card
+                    color: cs.surface,
                     shape: const CircleBorder(),
                     elevation: 2,
                     child: InkWell(
@@ -258,7 +252,7 @@ class ProfileHeaderCard extends StatelessWidget {
                       onTap: onEditPhoto,
                       child: Padding(
                         padding: EdgeInsets.all(6),
-                        child: Icon(Icons.edit, size: 16, color: Theme.of(context).colorScheme.primary), // inherits iconTheme color
+                        child: Icon(Icons.edit, size: 16, color: Theme.of(context).colorScheme.primary),
                       ),
                     ),
                   ),
@@ -304,7 +298,7 @@ class ProfileHeaderCard extends StatelessWidget {
                     Text(
                       subtitle!,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: subtitleColor ?? cs.onSurface.withOpacity(.65), // ✅ color override
+                        color: subtitleColor ?? cs.onSurface.withOpacity(.65),
                       ),
                     ),
                 ],

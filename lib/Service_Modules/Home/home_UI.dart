@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'dart:async'; // Added for the Marquee widget timer
+import 'dart:async';
+
 const kAgilaBlue = Color(0xFF0058CE);
 const kAgilaGold = Color(0xFFC88000);
 
-// ============================ HELPERS ============================
 
 String combineName(Map<String, dynamic>? data, {String fallback = 'User'}) {
   if (data == null) return fallback;
@@ -25,7 +25,6 @@ String combineName(Map<String, dynamic>? data, {String fallback = 'User'}) {
 }
 
 
-// ============================ DATA MODELS ============================
 
 class ScheduleItem {
   final String subjectName;
@@ -84,8 +83,6 @@ class SectionStudent {
 }
 
 /*
-// ===================== ANNOUNCEMENT MODEL =====================
-
 class AnnouncementItem {
   final String title;
   final String content;
@@ -102,9 +99,6 @@ class AnnouncementItem {
   });
 }
 */
-
-
-// ============================ UI WIDGETS ============================
 
 class AppCard extends StatelessWidget {
   final Widget? title;
@@ -154,7 +148,6 @@ class AppCard extends StatelessWidget {
 }
 
 /*
-// ===================== ANNOUNCEMENTS WIDGET =====================
 
 class AnnouncementsCard extends StatelessWidget {
   final List<AnnouncementItem> announcements;
@@ -307,9 +300,9 @@ class HeaderBar extends StatelessWidget {
   final String greeting;
   final String name;
   final String role;
-  final String? courseName;       // used for students
-  final String? sectionName;      // used for students
-  final String? departmentName;// ✅ NEW: used for teachers/heads
+  final String? courseName;
+  final String? sectionName;
+  final String? departmentName;
   final VoidCallback onOpenNotifications;
   final int unreadCount;
 
@@ -323,7 +316,6 @@ class HeaderBar extends StatelessWidget {
     required this.onOpenNotifications,
     required this.unreadCount,
     required this.departmentName,
-    // ✅ NEW (optional)
   });
 
   bool get _isTeacherOrHead =>
@@ -649,7 +641,6 @@ class TeacherScheduleCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // **IMPROVEMENT**: Chips are now horizontally scrollable
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -772,7 +763,6 @@ class StudentScheduleCard extends StatelessWidget {
                       ),
                       const SizedBox(height: 8),
 
-                      // **IMPROVEMENT**: Chips are now horizontally scrollable
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -988,7 +978,6 @@ class _SideBorderCard extends StatelessWidget {
   }
 }
 
-// ============================ DIALOGS & PANELS ============================
 
 class SlidingPanel extends StatelessWidget {
   final String title;
@@ -1039,7 +1028,6 @@ class SlidingPanel extends StatelessWidget {
   }
 }
 
-// --- Content Widgets for SlidingPanel ---
 
 class LoadingContent extends StatelessWidget {
   const LoadingContent({super.key});
@@ -1232,7 +1220,6 @@ Widget _buildDetailRow(BuildContext context, IconData icon, String text, {double
   );
 }
 
-// ============================ MARQUEE WIDGET ============================
 
 class Marquee extends StatefulWidget {
   final String text;
@@ -1325,7 +1312,6 @@ class _MarqueeState extends State<Marquee> {
   }
 }
 
-// ============================ Skeleton Loading ============================
 
 
 class ScheduleSkeletonLoading extends StatelessWidget {
@@ -1338,7 +1324,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Skeleton for title
         Container(
           width: 150,
           height: 24,
@@ -1349,7 +1334,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
         ),
         const SizedBox(height: 16),
 
-        // Skeleton items
         ...List.generate(itemCount, (index) => Padding(
           padding: const EdgeInsets.only(bottom: 12.0),
           child: _buildSkeletonItem(context),
@@ -1371,7 +1355,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Subject name skeleton
               Container(
                 width: 180,
                 height: 18,
@@ -1381,7 +1364,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
                 ),
               ),
 
-              // Time skeleton
               Container(
                 width: 100,
                 height: 16,
@@ -1394,7 +1376,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Chips skeleton
           Row(
             children: [
               Container(
@@ -1422,7 +1403,6 @@ class ScheduleSkeletonLoading extends StatelessWidget {
   }
 }
 
-// Add this class as well for the full page skeleton
 class HomeSkeletonLoading extends StatelessWidget {
   const HomeSkeletonLoading({super.key});
 
@@ -1433,7 +1413,6 @@ class HomeSkeletonLoading extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header skeleton
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1471,7 +1450,6 @@ class HomeSkeletonLoading extends StatelessWidget {
           ),
           const SizedBox(height: 16),
 
-          // Tag chips skeleton
           Row(
             children: [
               Container(
@@ -1496,7 +1474,6 @@ class HomeSkeletonLoading extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // Date and notes boxes skeleton
           Row(
             children: [
               Expanded(
@@ -1523,7 +1500,6 @@ class HomeSkeletonLoading extends StatelessWidget {
 
           const SizedBox(height: 24),
 
-          // Schedule skeleton
           ScheduleSkeletonLoading(),
         ],
       ),

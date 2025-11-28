@@ -16,7 +16,6 @@ class _NotificationModalState extends State<NotificationModal> {
   Key _futureBuilderKey = UniqueKey();
   bool _isClearing = false;
 
-  // Helper to get the correct collection reference
   CollectionReference get _notificationsCollection => FirebaseFirestore.instance
       .collection('users')
       .doc(widget.role)
@@ -87,7 +86,6 @@ class _NotificationModalState extends State<NotificationModal> {
             Expanded(
               child: FutureBuilder<QuerySnapshot>(
                 key: _futureBuilderKey,
-                // --- MODIFIED: Point directly to the user's subcollection ---
                 future: _notificationsCollection
                     .orderBy('timestamp', descending: true)
                     .get(),
@@ -139,7 +137,6 @@ class _NotificationModalState extends State<NotificationModal> {
                               Padding(
                                 padding: const EdgeInsets.only(top: 4.0),
                                 child: Text(
-                                  // Simple date/time formatting
                                   '${dateTime.toLocal().day}/${dateTime.toLocal().month} at ${dateTime.toLocal().hour.toString().padLeft(2, '0')}:${dateTime.toLocal().minute.toString().padLeft(2, '0')}',
                                   style: GoogleFonts.poppins(fontSize: 11, color: Colors.grey.shade600),
                                 ),

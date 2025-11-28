@@ -4,8 +4,6 @@ import 'package:project_agila/Service_Modules/Schedule/schedule_pdf_export.dart'
 import 'schedule_service.dart';
 import 'schedule_controller.dart';
 
-// ============================ HELPERS ============================
-
 String _d2(int n) => n.toString().padLeft(2, '0');
 String fmtTime(int minutes) {
   if (minutes < 0) return "N/A";
@@ -33,9 +31,9 @@ BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
 
 Color statusBg(AttendanceStatus st) {
   switch (st) {
-    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF); // Blue for scheduled
+    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF);
     case AttendanceStatus.present:   return const Color(0xFFDCF5E7);
-    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF); // Light blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF);
     case AttendanceStatus.late:      return const Color(0xFFFFF1CC);
     case AttendanceStatus.absent:    return const Color(0xFFFFE0E0);
     case AttendanceStatus.none:    return const Color(0xFFE0E0E0);
@@ -47,7 +45,7 @@ Color statusFg(AttendanceStatus st) {
   switch (st) {
     case AttendanceStatus.scheduled: return const Color(0xFF0058CE);
     case AttendanceStatus.present:   return const Color(0xFF1E7E34);
-    case AttendanceStatus.excused:   return const Color(0xFF0096C7); // Blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFF0096C7);
     case AttendanceStatus.late:      return const Color(0xFF9A6B00);
     case AttendanceStatus.absent:    return const Color(0xFFB3261E);
     case AttendanceStatus.none:      return const Color(0xFF616161);
@@ -151,10 +149,8 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // This layout is more robust and prevents overflows.
     return Row(
       children: [
-        // Left-side widget (either the Today button or an empty box for balance)
         SizedBox(
           width: 90,
           child: showTodayButton
@@ -165,17 +161,14 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
               : null,
         ),
 
-        // The flexible center part that expands and shrinks
         Expanded(
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                // Use the new showPrev flag to enable/disable the button
                 onPressed: showPrev ? onPrev : null,
                 icon: Icon(Icons.chevron_left, color: showPrev ? cs.onSurface : cs.onSurface.withOpacity(0.38)),
               ),
-              // Make the label flexible to prevent overflow
               Flexible(
                 child: InkWell(
                   onTap: onLabelTap,
@@ -185,7 +178,7 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
                     child: Text(
                       label,
                       textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis, // Prevent long text from overflowing
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: cs.primary,
@@ -201,8 +194,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
             ],
           ),
         ),
-
-        // Right-side empty box to balance the layout
         const SizedBox(width: 90),
       ],
     );
@@ -246,7 +237,6 @@ class StatCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left side with icon and label
             Row(
               children: [
                 CircleAvatar(
@@ -265,10 +255,8 @@ class StatCard extends StatelessWidget {
               ],
             ),
 
-            // Expanded space to push the number to the right
             const Spacer(),
 
-            // Right side with the count number
             Text(
               "$value",
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -318,7 +306,6 @@ class DailyListScheduleLike extends StatelessWidget {
       return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No classes scheduled for this day.")));
     }
 
-    // Sort groups by the start time of their first session
     groups.sort((a, b) {
       final aStart = a.sessions.firstOrNull?.startMinutes ?? 0;
       final bStart = b.sessions.firstOrNull?.startMinutes ?? 0;
@@ -334,17 +321,15 @@ class DailyListScheduleLike extends StatelessWidget {
         final group = groups[i];
         final firstSession = group.sessions.first;
 
-        // Combine room types if multiple exist (e.g., LECTURE, LABORATORY)
         final roomTypes = group.sessions.map((s) => s.roomType).toSet().join(', ');
 
         return TodayScheduleCard(
           subject: firstSession.subject,
           roomType: roomTypes,
           section: firstSession.section,
-          // Show all rooms and times if they are different
           sessions: group.sessions,
           accentColor: _subjectAccent(firstSession.subject),
-          onViewDetails: () => onViewDetails(firstSession), // View details for the first session
+          onViewDetails: () => onViewDetails(firstSession),
         );
       },
     );
@@ -397,7 +382,6 @@ class WeeklyList extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
 
-                // Add a summary of attendance
                 Text(
                   "Attendance: ${item.attended}/${item.total}",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -407,14 +391,12 @@ class WeeklyList extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
 
-                // Create a row for each room type
                 ...roomTypes.map((roomType) {
                   final statuses = item.getStatusesForRoomType(roomType);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
                       children: [
-                        // Room type label
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -430,19 +412,16 @@ class WeeklyList extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
 
-                        // Status indicators for each day
                         ...List.generate(6, (dayIndex) {
-                          // Safely get the status, defaulting to null if out of bounds.
                           final status = (dayIndex < statuses.length) ? statuses[dayIndex] : null;
                           final weekday = dayIndex + 1;
 
-                          // If status is null, it means there's no session on this day for this room type.
                           if (status == null) {
                             return Container(
                               margin: const EdgeInsets.only(right: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200, // A neutral background
+                                color: Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -450,7 +429,7 @@ class WeeklyList extends StatelessWidget {
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.grey.shade500, // A dimmer text color
+                                  color: Colors.grey.shade500,
                                 ),
                               ),
                             );
@@ -513,7 +492,6 @@ class MonthlyList extends StatelessWidget {
       );
     }
 
-    // Group items by subject
     final bySubject = <String, List<SubjectTotals>>{};
     for (final item in items) {
       bySubject.putIfAbsent(item.subjectDisplay, () => []).add(item);
@@ -623,8 +601,7 @@ class TodayScheduleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // For simplicity, we'll show the status of the first session in the chip.
-    // A more complex UI could show multiple status chips.
+
     final firstSession = sessions.first;
     final sLabel = statusText(firstSession.status);
     final sBg = statusBg(firstSession.status);
@@ -659,7 +636,6 @@ class TodayScheduleCard extends StatelessWidget {
                       Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: sBg, borderRadius: BorderRadius.circular(999)), child: Text(sLabel, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: sFg, fontWeight: FontWeight.w600, fontSize: 12))),
                     ]),
                     const SizedBox(height: 6),
-                    // Display details for each session in the group
                     ...sessions.map((session) => Padding(
                       padding: const EdgeInsets.only(top: 4.0),
                       child: Row(children: [
@@ -690,7 +666,7 @@ class SessionDetailsPanel extends StatelessWidget {
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
   final DateTime selectedDate;
-  final ActiveTerm? activeTerm; // Add this parameter
+  final ActiveTerm? activeTerm;
 
   const SessionDetailsPanel({
     super.key,
@@ -698,7 +674,7 @@ class SessionDetailsPanel extends StatelessWidget {
     required this.fetchStudents,
     required this.fetchInstructor,
     required this.selectedDate,
-    this.activeTerm, // Add this parameter
+    this.activeTerm,
   });
 
   @override
@@ -708,7 +684,6 @@ class SessionDetailsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Export PDF button with instructor details
           Center(
             child: FutureBuilder<InstructorDetails?>(
               future: fetchInstructor(),
@@ -737,8 +712,6 @@ class SessionDetailsPanel extends StatelessWidget {
           ),
 
           const SizedBox(height: 16),
-
-          // Rest of the content
           _SessionDetailsContent(
             session: session,
             fetchStudents: fetchStudents,
@@ -755,18 +728,17 @@ class _SessionDetailsContent extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
-  final DateTime selectedDate; // Add this field
+  final DateTime selectedDate;
 
   const _SessionDetailsContent({
     required this.session,
     required this.fetchStudents,
     required this.fetchInstructor,
-    required this.selectedDate, // Add this parameter
+    required this.selectedDate,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Get attendance status color and label
     final sBg = statusBg(session.status);
     final sFg = statusFg(session.status);
     final sLabel = statusText(session.status);
@@ -778,7 +750,6 @@ class _SessionDetailsContent extends StatelessWidget {
         Text(session.section, style: Theme.of(context).textTheme.titleSmall),
         const Divider(height: 24),
 
-        // Special message for "No attendance session created" case
         if (session.source == "No attendance session created")
           Container(
             padding: const EdgeInsets.all(12),
@@ -802,7 +773,6 @@ class _SessionDetailsContent extends StatelessWidget {
             ),
           ),
 
-        // Attendance status chip
         if (session.status != AttendanceStatus.scheduled) ...[
           Row(
             children: [
@@ -838,7 +808,6 @@ class _SessionDetailsContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Attendance details
           if (session.source != null && session.source != "No attendance session created")
             _kv(context, Icons.source, 'Source', session.source!),
           if (session.firstSeen != null)
@@ -858,7 +827,6 @@ class _SessionDetailsContent extends StatelessWidget {
 
         const Divider(height: 24),
 
-        // Replace TabBar with just the Classmates section
         SizedBox(
           height: 300,
           child: Column(
@@ -878,10 +846,8 @@ class _SessionDetailsContent extends StatelessWidget {
                         return const ErrorContent(error: "No Class list found.");
                       }
 
-                      // Format the selected date to use for attendance lookup
                       final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
 
-                      // Pass the formatted date string to the section roster content
                       return _SectionRosterContent(
                         students: snapshot.data!,
                         session: session,
@@ -963,12 +929,12 @@ class ErrorContent extends StatelessWidget {
 class _SectionRosterContent extends StatefulWidget {
   final List<SectionStudent> students;
   final Session session;
-  final String dateStr; // Change this to String type
+  final String dateStr;
 
   const _SectionRosterContent({
     required this.students,
     required this.session,
-    required this.dateStr, // Update parameter type
+    required this.dateStr,
   });
 
   @override
@@ -988,14 +954,12 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
 
   Future<void> _loadAttendance() async {
     try {
-      // Use the dateStr provided from parent widget
-      // This contains the selected date from the UI, not today's date
+
       final actualDateStr = widget.dateStr;
-      // Use dependency injection to get the service
       final service = FirestoreScheduleService();
       final records = await service.fetchStudentAttendanceForSession(
         scheduleId: widget.session.id,
-        dateStr: actualDateStr, // Use the provided date string
+        dateStr: actualDateStr,
       );
 
       if (mounted) {
@@ -1029,7 +993,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
       return Center(child: Text("Error loading attendance: $error"));
     }
 
-    // Create a map for quick lookups of attendance by student ID
     final attendanceMap = <String, StudentAttendanceRecord>{};
     if (attendanceRecords != null) {
       for (final record in attendanceRecords!) {
@@ -1041,7 +1004,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
       itemCount: widget.students.length,
       itemBuilder: (context, index) {
         final student = widget.students[index];
-        // Look up attendance for this student
         final attendanceRecord = attendanceMap[student.uid];
         final hasAttendance = attendanceRecord != null;
 
@@ -1168,12 +1130,10 @@ class MonthlyDetailsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Get all sessions for this specific subject and room type for the month
     final selfAttendance = controller.state.monthlyDetails
         .where((s) => s.subject == item.subjectDisplay && s.roomType == item.roomType)
         .toList();
 
-    // Create a map of date to session for quick lookup
     final attendanceMap = <DateTime, Session>{};
     for (final session in selfAttendance) {
       if (session.updatedAt != null) {
@@ -1182,7 +1142,6 @@ class MonthlyDetailsPanel extends StatelessWidget {
       }
     }
 
-    // Get the start and end of the month from the controller's anchor date
     final monthDate = controller.state.anchor;
     final firstDayOfMonth = DateTime(monthDate.year, monthDate.month, 1);
     final lastDayOfMonth = DateTime(monthDate.year, monthDate.month + 1, 0);
@@ -1247,20 +1206,17 @@ class MonthlyAttendanceGrid extends StatelessWidget {
     final dayCount = lastDayOfMonth.day;
     const dayHeaders = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
 
-    // Determine the weekday of the first day of the month (1=Mon, 7=Sun)
     final firstWeekday = firstDayOfMonth.weekday;
     final emptyCellsBefore = firstWeekday - 1;
 
     return Column(
       children: [
-        // Day headers
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: dayHeaders.map((day) => Text(day, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold))).toList(),
         ),
         const SizedBox(height: 8),
 
-        // Grid of days
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -1273,7 +1229,7 @@ class MonthlyAttendanceGrid extends StatelessWidget {
           itemCount: dayCount + emptyCellsBefore,
           itemBuilder: (context, index) {
             if (index < emptyCellsBefore) {
-              return const SizedBox.shrink(); // Empty cell for alignment
+              return const SizedBox.shrink();
             }
 
             final dayNumber = index - emptyCellsBefore + 1;
@@ -1286,9 +1242,9 @@ class MonthlyAttendanceGrid extends StatelessWidget {
                 color: statusBg(status),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: SingleChildScrollView( // Wrap the Column in a SingleChildScrollView
+              child: SingleChildScrollView(
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 2.0), // Add slight vertical padding
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
@@ -1346,7 +1302,6 @@ class _CollapsibleStudentAttendanceListState extends State<CollapsibleStudentAtt
       return const Center(child: Text("No student records available."));
     }
 
-    // Sort students by name
     widget.students.sort((a, b) => a.name.compareTo(b.name));
 
     return ListView.builder(
@@ -1407,7 +1362,6 @@ Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
   ]),
 );
 
-// ============================ SKELETON WIDGETS ============================
 
 class _SkeletonBox extends StatelessWidget {
   final double? width;

@@ -4,7 +4,7 @@ import 'package:dropdown_search/dropdown_search.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
-import 'package:path/path.dart' as p; // For getting file extension
+import 'package:path/path.dart' as p;
 import 'package:mime/mime.dart';
 
 
@@ -48,7 +48,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
   bool _isLoadingTeachers = false;
   bool _isLoadingAdmins = false;
 
-  // New state variables for fetching academic data
   Map<String, String>? _academicData;
   String? _loadingError;
 
@@ -57,16 +56,15 @@ class _AddRequestModalState extends State<AddRequestModal> {
     super.initState();
 
     _selectedType = _getDefaultTypeForRole(widget.role);
-    // Fetch academic data and recipient lists when the dialog opens
     _initializeData();
   }
 
 
   String _getDefaultTypeForRole(String role) {
     if (role == 'teacher' || role == 'program_head') {
-      return 'Permission'; // Default for teachers and program heads
+      return 'Permission';
     } else {
-      return 'To be Excused'; // Default for students and others
+      return 'To be Excused';
     }
   }
 
@@ -82,7 +80,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
 
   List<DropdownMenuItem<String>> _getDropdownItemsForRole(String role) {
     if (role == 'teacher' || role == 'program_head') {
-      // Teacher and program_head specific options as seen in the image
       return const [
         DropdownMenuItem(value: 'Permission', child: Text('Permission')),
         DropdownMenuItem(value: 'Schedule Adjustment', child: Text('Schedule Adjustment')),
@@ -90,7 +87,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
         DropdownMenuItem(value: 'Other', child: Text('Other')),
       ];
     } else {
-      // Default options for students and other roles
       return const [
         DropdownMenuItem(value: 'To be Excused', child: Text('To be Excused')),
         DropdownMenuItem(value: 'Permission', child: Text('Permission')),
@@ -100,11 +96,9 @@ class _AddRequestModalState extends State<AddRequestModal> {
     }
   }
 
-  /// Fetches the active academic year and semester from Firestore.
   Future<void> _fetchActiveAcademicData() async {
     final firestore = FirebaseFirestore.instance;
     try {
-      // 1. Find the active academic year
       final yearQuery = await firestore
           .collection('academic_years')
           .where('status', isEqualTo: 'Active')
@@ -119,7 +113,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
       final academicYearId = yearDoc.id;
       final acadYear = yearDoc.data()['acadYear'] as String;
 
-      // 2. Find the active semester within that year
       final semesterQuery = await firestore
           .collection('academic_years')
           .doc(academicYearId)
@@ -136,7 +129,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
       final semesterId = semesterDoc.id;
       final semesterName = semesterDoc.data()['semesterName'] as String;
 
-      // 3. Set the data to the state
       if (mounted) {
         setState(() {
           _academicData = {
@@ -236,7 +228,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
   }
 
   Future<void> _submitRequest() async {
-    // Prevent submission if academic data is not loaded
     if (_academicData == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(_loadingError ?? 'Academic data is not loaded yet.')),
@@ -361,7 +352,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
         'status': 'Pending',
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
-        // Use the fetched academic data from the state
         'acadYear': _academicData!['acadYear'],
         'academicYearId': _academicData!['academicYearId'],
         'semesterId': _academicData!['semesterId'],
@@ -373,7 +363,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
         'attachments': attachmentsData,
         'role': widget.role,
         'recipientRole': recipientRole,
-        'teacherDecision': {}, // Initialize with an empty map for consistency
+        'teacherDecision': {},
       };
 
       final batch = FirebaseFirestore.instance.batch();
@@ -424,9 +414,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
     );
   }
 
-  /// Builds the main content of the form, handling loading and error states.
   Widget _buildFormContent() {
-    // While fetching academic data, show a loading indicator
     if (_academicData == null && _loadingError == null) {
       return const Center(
         child: Column(
@@ -440,7 +428,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
       );
     }
 
-    // If there was an error fetching data, show the error message
     if (_loadingError != null) {
       return Center(
         child: Padding(
@@ -454,7 +441,6 @@ class _AddRequestModalState extends State<AddRequestModal> {
       );
     }
 
-    // Once data is loaded, show the form
     return SingleChildScrollView(
       child: Form(
         key: _formKey,
@@ -465,7 +451,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
                 value: _selectedType,
                 decoration: _inputDecoration('Type of Request'),
                 dropdownColor: Theme.of(context).colorScheme.surfaceContainerHighest,
-                items: _getDropdownItemsForRole(widget.role), // Use the helper method here
+                items: _getDropdownItemsForRole(widget.role),
                 onChanged: (val) => setState(() => _selectedType = val!),
                 validator: (val) => val == null || val.isEmpty ? 'Required' : null,
               ),
@@ -537,7 +523,7 @@ class _AddRequestModalState extends State<AddRequestModal> {
             const Divider(),
             const SizedBox(height: 12),
             Expanded(
-              child: _buildFormContent(), // Use the new builder method here
+              child: _buildFormContent(),
             ),
           ],
         ),

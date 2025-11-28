@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'attendance_service.dart';
 
-// These UI-specific models remain here as they are only used by the Attendance UI.
 enum ViewMode { daily, weekly, monthly }
 
 class SubjectDayGroup {
@@ -12,7 +11,7 @@ class SubjectDayGroup {
 
 class SubjectWeekItem {
   final String subjectDisplay;
-  final Map<int, Map<String, AttendanceStatus>> sessionStatuses; // weekday -> roomType -> status
+  final Map<int, Map<String, AttendanceStatus>> sessionStatuses;
   final int attended;
   final int total;
 
@@ -33,8 +32,7 @@ class SubjectWeekItem {
     }
     return statuses;
   }
-
-  // Get all unique room types for this subject
+  // Get all room types for this subject
   List<String> get roomTypes {
     final types = <String>{};
     for (final weekday in sessionStatuses.keys) {
@@ -100,7 +98,6 @@ class AttendanceState {
   final AttendanceStatusCounts statusCounts;
   final List<Session>? filteredSessions;
   final AttendanceStatus? selectedStatus;
-  // New properties to store detailed sessions for weekly and monthly views
   final List<Session> weeklyDetails;
   final List<Session> monthlyDetails;
 
@@ -191,7 +188,7 @@ class AttendanceController extends ChangeNotifier {
 
   bool get canShiftNext {
     final term = state.activeTerm;
-    if (term == null) return false; // Cannot shift if we don't know the term boundaries.
+    if (term == null) return false;
 
     // final currentAnchor = _dateOnly(state.anchor);
     final termEnd = _dateOnly(term.endDate);
@@ -218,7 +215,7 @@ class AttendanceController extends ChangeNotifier {
     final term = state.activeTerm;
     if (term == null) return false;
 
-    // For Daily view: Allow viewing at least the past 30 days
+    //Allow viewing at least the past 30 days
     if (state.mode == ViewMode.daily) {
       final thirtyDaysAgo = _dateOnly(DateTime.now()).subtract(const Duration(days: 30));
       final earliestAllowed = _dateOnly(term.startDate).isAfter(thirtyDaysAgo)
@@ -236,7 +233,7 @@ class AttendanceController extends ChangeNotifier {
       case ViewMode.monthly:
         return _startOfMonth(state.anchor).isAfter(_startOfMonth(termStart));
       default:
-        return false; // Should not reach here
+        return false;
     }
   }
 
@@ -311,7 +308,6 @@ class AttendanceController extends ChangeNotifier {
     return '${session.subject} (${session.roomType})';
   }
 
-  // New method to filter sessions by attendance status
   Future<void> filterByStatus(AttendanceStatus status) async {
     _state = _state.copyWith(loading: true);
     notifyListeners();
@@ -359,7 +355,6 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // We make a lightweight call to the service if the term isn't already in the state.
       final currentactiveTerm = _state.activeTerm ?? await service.getSessionsForRange(
         userId: userId, role: role, start: DateTime.now(), end: DateTime.now(),
       ).then((res) => res.$2);
@@ -421,7 +416,7 @@ class AttendanceController extends ChangeNotifier {
         sessionsByDate.forEach((date, sessions) {
           if (date.weekday > 5) return;
           for (final s in sessions) {
-            final subject = s.subject; // Use just the subject name without room type
+            final subject = s.subject;
             bySubject
                 .putIfAbsent(subject, () => {})
                 .putIfAbsent(date.weekday, () => {})
@@ -439,13 +434,10 @@ class AttendanceController extends ChangeNotifier {
             for (final roomTypeEntry in weekdayEntry.value.entries) {
               final session = roomTypeEntry.value;
 
-              // Initialize the weekday map if needed
               sessionStatuses.putIfAbsent(weekday, () => {});
 
-              // Add the status for this room type
               sessionStatuses[weekday]![session.roomType] = session.status;
 
-              // Count attended and total
               if (session.status == AttendanceStatus.present ||
                   session.status == AttendanceStatus.excused) {
                 attendedCount++;
@@ -461,13 +453,10 @@ class AttendanceController extends ChangeNotifier {
             total: totalCount,
           );
         }).toList()..sort((a,b) => a.subjectDisplay.compareTo(b.subjectDisplay));
-
-        // Store all sessions for detailed view
         weeklyDetails = sessionsByDate.values.expand((s) => s).toList();
       } else if (state.mode == ViewMode.monthly) {
         final map = <String, Map<String, List<Session>>>{};
         sessionsByDate.values.expand((s) => s).forEach((s) {
-          // Group by subject and room type
           map
               .putIfAbsent(s.subject, () => {})
               .putIfAbsent(s.roomType, () => [])
@@ -498,8 +487,6 @@ class AttendanceController extends ChangeNotifier {
             if (subjectCompare != 0) return subjectCompare;
             return a.roomType.compareTo(b.roomType);
           });
-
-        // Store all sessions for detailed view
         monthlyDetails = sessionsByDate.values.expand((s) => s).toList();
       }
 
@@ -520,7 +507,6 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add this to AttendanceController
   Future<void> updatePastAttendance() async {
     _state = _state.copyWith(loading: true);
     notifyListeners();
@@ -538,8 +524,6 @@ class AttendanceController extends ChangeNotifier {
       // Get all sessions for the term
       final termStart = activeTerm.startDate;
       final now = DateTime.now();
-
-      // Process in smaller chunks to avoid timeout
       var currentDate = termStart;
       while (currentDate.isBefore(now)) {
         final endDate = currentDate.add(const Duration(days: 7));
@@ -566,7 +550,6 @@ class AttendanceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  // Add this method to the AttendanceController class
   Future<void> updateMissingAttendance() async {
     _state = _state.copyWith(loading: true);
     notifyListeners();
@@ -587,7 +570,6 @@ class AttendanceController extends ChangeNotifier {
         ViewMode.monthly => (_startOfMonth(state.anchor), _endOfMonth(state.anchor)),
       };
 
-      // Force refresh to update past sessions
       final (sessionsByDate, termFromService) = await service.getSessionsForRange(
         userId: userId, role: role, start: start, end: end,
       );
@@ -615,7 +597,6 @@ class AttendanceController extends ChangeNotifier {
         }
       }
 
-      // Process sessions based on view mode (similar to refresh method)
       List<SubjectDayGroup> dailyGroups = const [];
       List<SubjectWeekItem> weeklyItems = const [];
       List<SubjectTotals> monthlyTotals = const [];
@@ -635,7 +616,6 @@ class AttendanceController extends ChangeNotifier {
         }).toList()
           ..sort((a, b) => a.subjectDisplay.compareTo(b.subjectDisplay));
       } else if (state.mode == ViewMode.weekly) {
-        // Weekly view processing (same as in refresh method)
         final bySubject = <String, Map<int, Map<String, Session>>>{};
 
         sessionsByDate.forEach((date, sessions) {
@@ -680,7 +660,6 @@ class AttendanceController extends ChangeNotifier {
 
         weeklyDetails = sessionsByDate.values.expand((s) => s).toList();
       } else if (state.mode == ViewMode.monthly) {
-        // Monthly view processing (same as in refresh method)
         final map = <String, Map<String, List<Session>>>{};
         sessionsByDate.values.expand((s) => s).forEach((s) {
           map

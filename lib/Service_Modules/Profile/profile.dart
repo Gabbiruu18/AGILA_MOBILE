@@ -20,14 +20,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     controller = ProfileController()..addListener(_onChanged);
-    // kick off load
     controller.init(role: widget.role, uid: widget.uid);
   }
 
   @override
   void dispose() {
     controller.removeListener(_onChanged);
-    controller.dispose(); // <-- add this
+    controller.dispose();
     super.dispose();
   }
 
@@ -49,7 +48,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       case 'programhead':
         return 'Program Head';
       default:
-      // prettify whatever was stored in DB (e.g., "registrar head")
         return normalizedRole
             .split('_')
             .map((w) => w.isEmpty ? '' : (w[0].toUpperCase() + w.substring(1)))
@@ -77,13 +75,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final roleLabel = _roleLabelFromRole(normalizedRole);
 
-// ✅ compute staff here (now you have the role)
     final isStaff = normalizedRole == 'teacher'
         || normalizedRole == 'teachers'
         || normalizedRole == 'program_head'
         || normalizedRole == 'programhead';
 
-// keep your subtitle as-isd
     final studheaderSubtitle = data['sectionName'] as String?;
     final staffheaderSubtitle = data['departmentName'] as String?;
 
@@ -92,7 +88,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        //backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
         foregroundColor: Theme.of(context).colorScheme.primary,
@@ -110,14 +105,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(vertical: 5),
         children: [
-          if (controller.isBusy) // ✅ CHANGED: from isSyncing to isBusy
+          if (controller.isBusy)
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 16),
               child: LinearProgressIndicator(minHeight: 2),
             ),
           SizedBox(height: 12),
-
-          // Header
           ProfileHeaderCard(
             name: controller.displayName,
             roleLabel: roleLabel,
@@ -129,7 +122,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           SizedBox(height: 16),
 
-          // Personal Info
           InfoCard(
             title: 'Personal Info',
             children: [
@@ -139,7 +131,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   value: controller.displayName),
               ReadonlyTile(
                   icon: Icons.mail_outline, label: 'Email', value: data['email']),
-              // NEW: make Contact editable with a pencil
               EditableTile(
                 icon: Icons.phone_outlined,
                 label: 'Contact',
@@ -150,7 +141,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           SizedBox(height: 16),
 
-          // School / Work Info
           InfoCard(
             title: isStudent ? 'School Info' : 'Work Info',
             children: isStudent

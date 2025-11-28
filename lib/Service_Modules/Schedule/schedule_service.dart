@@ -2,9 +2,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:project_agila/Service_Modules/Notification/notification_service.dart'; // Import the notification service
+import 'package:project_agila/Service_Modules/Notification/notification_service.dart';
 
-// ============================ DATA MODELS (UPDATED) ============================
 
 enum AttendanceStatus { scheduled, present, late, absent, excused, none }
 class Session {
@@ -21,12 +20,12 @@ class Session {
   final String? instructorName;
   final AttendanceStatus status;
 
-  // New fields for detailed attendance data
+
   final DateTime? firstSeen;
   final DateTime? lastSeen;
-  final String? source; // "Manual" or "CCTV"
+  final String? source;
   final String? academicStatus;
-  final String? studentId; // UID of the user
+  final String? studentId;
   final DateTime? updatedAt;
   final String? studentNo;
 
@@ -130,13 +129,13 @@ class SectionStudent {
   final String uid;
   final String name;
   final String? photoURL;
-  final String? studentNumber; // Add this property
+  final String? studentNumber;
 
   SectionStudent({
     required this.uid,
     required this.name,
     this.photoURL,
-    this.studentNumber, // Add this parameter
+    this.studentNumber,
   });
 }
 
@@ -144,7 +143,7 @@ class InstructorDetails {
   final String name;
   final String? departmentName;
   final String? photoURL;
-  final String? employeeNumber; // Add this field
+  final String? employeeNumber;
 
   InstructorDetails({required this.name, this.departmentName, this.photoURL, this.employeeNumber});
 }
@@ -200,7 +199,6 @@ class AttendanceStatusCounts {
   }
 }
 
-// ============================ SERVICE INTERFACE ============================
 
 abstract class ScheduleService {
   Future<(Map<DateTime, List<Session>>, ActiveTerm?)> getSessionsForRange({
@@ -224,7 +222,6 @@ abstract class ScheduleService {
     required DateTime forDate
   });
 
-  // New method to get sessions by status
   Future<List<Session>> getSessionsByStatus({
     required String userId,
     required String role,
@@ -233,12 +230,10 @@ abstract class ScheduleService {
   });
 }
 
-// ============================ FIRESTORE IMPLEMENTATION (UPDATED) ============================
 
 class FirestoreScheduleService implements ScheduleService {
   final FirebaseFirestore _db;
-  // Add simple caching to improve performance
-  final NotificationService _notificationService = NotificationService(); // Instantiate the service
+  final NotificationService _notificationService = NotificationService();
   final Map<String, ActiveTerm> _termCache = {};
 
   FirestoreScheduleService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
@@ -264,7 +259,6 @@ class FirestoreScheduleService implements ScheduleService {
       allSessions = await _fetchStudentSchedules(uid: userId, role: role, activeTerm: activeTerm);
     }
 
-    // Enrich sessions with attendance data
     final enrichedSessionsWithDates = await _enrichSessionsWithAttendanceData(allSessions, userId, role, start, end);
 
     final results = <DateTime, List<Session>>{};
@@ -278,7 +272,6 @@ class FirestoreScheduleService implements ScheduleService {
       results[dateOnly] = sessionsForDay;
 
 
-      // --- NEW: Schedule notifications for today ---
       final today = DateTime.now();
       if (d.year == today.year && d.month == today.month && d.day == today.day) {
         _scheduleIncomingClassNotifications(sessionsForDay);
@@ -287,7 +280,6 @@ class FirestoreScheduleService implements ScheduleService {
     return (results, activeTerm);
   }
 
-  // --- NEW METHOD TO SCHEDULE NOTIFICATIONS ---
   Future<void> _scheduleIncomingClassNotifications(List<Session> sessions) async {
     final now = DateTime.now();
 
@@ -295,13 +287,11 @@ class FirestoreScheduleService implements ScheduleService {
       final startTimeMinutes = session.startMinutes;
       final classDateTime = DateTime(now.year, now.month, now.day, startTimeMinutes ~/ 60, startTimeMinutes % 60);
 
-      // Schedule notification 15 minutes before the class starts
       final notificationTime = classDateTime.subtract(const Duration(minutes: 15));
 
-      // Only schedule if the notification time is in the future
       if (notificationTime.isAfter(now)) {
         await _notificationService.scheduleNotification(
-          id: session.id.hashCode, // Use a unique ID for each notification
+          id: session.id.hashCode,
           title: 'Upcoming Class',
           body: 'Your class "${session.subject}" starts in 15 minutes.',
           scheduledTime: notificationTime,
@@ -357,15 +347,11 @@ class FirestoreScheduleService implements ScheduleService {
     if (scheduleIds.isEmpty) {
       return [];
     }
-
-    // Create a set of date strings for the given range for efficient lookup.
     final dateStrings = <String>{};
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
       dateStrings.add(_formatDateStr(d));
     }
 
-    // Fetch all attendance documents for the relevant schedule IDs.
-    // This is now a valid query using 'whereIn' on a single field.
     final allAttendanceDocs = <DocumentSnapshot>[];
     final scheduleIdChunks = _chunk(scheduleIds.toList(), 30);
 
@@ -376,9 +362,8 @@ class FirestoreScheduleService implements ScheduleService {
           .where('scheduleId', whereIn: idChunk)
           .get();
 
-      // Filter by date range in Dart to avoid an invalid query.
       for (final doc in attendanceSessionsSnap.docs) {
-        final data = doc.data() as Map<String, dynamic>;
+        final data = doc.data();
         final dateStr = data['dateStr'] as String?;
         if (dateStr != null && dateStrings.contains(dateStr)) {
           allAttendanceDocs.add(doc);
@@ -386,7 +371,6 @@ class FirestoreScheduleService implements ScheduleService {
       }
     }
 
-    // Create a lookup map: 'scheduleId-dateStr' -> Document
     final attendanceByScheduleIdAndDate = <String, DocumentSnapshot>{};
     for (final doc in allAttendanceDocs) {
       final data = doc.data() as Map<String, dynamic>;
@@ -397,7 +381,6 @@ class FirestoreScheduleService implements ScheduleService {
       }
     }
 
-    // Iterate through each day in the range to build the final list of sessions.
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
       final dateStr = _formatDateStr(d);
       final sessionsForDay = sessions.where((s) => s.weekday == d.weekday).toList();
@@ -406,7 +389,6 @@ class FirestoreScheduleService implements ScheduleService {
         final attendanceSessionDoc = attendanceByScheduleIdAndDate['${session.id}-$dateStr'];
 
         if (attendanceSessionDoc != null) {
-          // An attendance session exists for this day.
           DocumentSnapshot? userAttendanceDoc;
           if (role == 'teacher' || role == 'program_head') {
             userAttendanceDoc = await attendanceSessionDoc.reference.collection('instructor').doc('main').get();
@@ -415,7 +397,6 @@ class FirestoreScheduleService implements ScheduleService {
           }
 
           if (userAttendanceDoc.exists && userAttendanceDoc.data() != null) {
-            // User has a record in this session.
             final data = userAttendanceDoc.data() as Map<String, dynamic>;
             enrichedSessions.add(Session(
               id: session.id,
@@ -439,7 +420,6 @@ class FirestoreScheduleService implements ScheduleService {
               studentNo: _strOrNull(data['studentNo']),
             ));
           } else {
-            // Session exists, but user has no record.
             final endTime = DateTime(d.year, d.month, d.day, session.endMinutes ~/ 60, session.endMinutes % 60);
             if (DateTime.now().isAfter(endTime)) {
               enrichedSessions.add(session.withStatus(AttendanceStatus.absent, date: d));
@@ -448,7 +428,6 @@ class FirestoreScheduleService implements ScheduleService {
             }
           }
         } else {
-          // No attendance session was created for this day.
           final endTime = DateTime(d.year, d.month, d.day, session.endMinutes ~/ 60, session.endMinutes % 60);
           if (DateTime.now().isAfter(endTime)) {
             enrichedSessions.add(session.copyWith(status: AttendanceStatus.none, updatedAt: d));
@@ -480,7 +459,6 @@ class FirestoreScheduleService implements ScheduleService {
         return result;
       }
 
-      // Fetch academic year details directly
       final yearDoc = await _db.collection('academic_years').doc(activeTerm.academicYearId).get();
       if (yearDoc.exists && yearDoc.data() != null) {
         final yearData = yearDoc.data()!;
@@ -488,7 +466,6 @@ class FirestoreScheduleService implements ScheduleService {
         debugPrint('[PDF] Academic year: ${result['acadYear']}');
       }
 
-      // Fetch semester details
       final semDoc = await _db.collection('academic_years')
           .doc(activeTerm.academicYearId)
           .collection('semesters')
@@ -500,7 +477,6 @@ class FirestoreScheduleService implements ScheduleService {
         debugPrint('[PDF] Semester name: ${result['semesterName']}');
       }
 
-      // Search for the schedule document to find its path
       final departmentsSnap = await semDoc.reference.collection('departments').get();
       for (final deptDoc in departmentsSnap.docs) {
         final coursesSnap = await deptDoc.reference.collection('courses').get();
@@ -511,11 +487,10 @@ class FirestoreScheduleService implements ScheduleService {
             for (final sectionDoc in sectionsSnap.docs) {
               final scheduleDoc = await sectionDoc.reference.collection('schedules').doc(scheduleId).get();
               if (scheduleDoc.exists) {
-                // Found it! Now fill in the details.
                 result['courseName'] = _strOrNull(courseDoc.data()['courseName']) ?? '';
                 result['yearLevelName'] = _strOrNull(yearLevelDoc.data()['yearLevelName']) ?? '';
                 result['sectionName'] = _strOrNull(sectionDoc.data()['sectionName'] ?? sectionDoc.data()['name']) ?? '';
-                return result; // Exit once found
+                return result;
               }
             }
           }
@@ -528,15 +503,12 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // Add this method to your FirestoreScheduleService class
   Future<List<StudentAttendanceRecord>> fetchStudentAttendanceForSession({
     required String scheduleId,
     String? dateStr
   }) async {
     try {
-      // Use provided date or default to current date
       final actualDateStr = dateStr ?? _formatDateStr(DateTime.now());
-      // First, find the attendance session document for this schedule on this date
       final attendanceSessionsQuery = await _db
           .collection('attendance_sessions')
           .where('dateStr', isEqualTo: actualDateStr)
@@ -550,7 +522,6 @@ class FirestoreScheduleService implements ScheduleService {
 
       final attendanceSessionDoc = attendanceSessionsQuery.docs.first;
 
-      // Get all students attendance records from this session
       final studentsSnap = await attendanceSessionDoc.reference
           .collection('students')
           .get();
@@ -558,7 +529,6 @@ class FirestoreScheduleService implements ScheduleService {
 
       final attendanceRecords = <StudentAttendanceRecord>[];
 
-      // Process each attendance record
       for (final doc in studentsSnap.docs) {
         try {
           final data = doc.data();
@@ -575,14 +545,13 @@ class FirestoreScheduleService implements ScheduleService {
             firstSeen: _parseDate(data['firstSeen']),
             lastSeen: _parseDate(data['lastSeen']),
             source: _strOrNull(data['source']),
-            photoURL: null, // We'll add photo URLs in a moment
+            photoURL: null,
           ));
         } catch (e) {
           debugPrint('[ATTENDANCE] Error processing student attendance record: $e');
         }
       }
 
-      // Enhance records with photo URLs if available
       for (int i = 0; i < attendanceRecords.length; i++) {
         final record = attendanceRecords[i];
         try {
@@ -596,7 +565,6 @@ class FirestoreScheduleService implements ScheduleService {
           if (studentDoc.exists && studentDoc.data() != null) {
             final photoURL = _strOrNull(studentDoc.data()!['photoURL']);
             if (photoURL != null) {
-              // Create a new record with the photo URL
               attendanceRecords[i] = StudentAttendanceRecord(
                 uid: record.uid,
                 name: record.name,
@@ -610,12 +578,10 @@ class FirestoreScheduleService implements ScheduleService {
             }
           }
         } catch (e) {
-          // Ignore errors fetching photo URL
           debugPrint('[ATTENDANCE] Error fetching photo URL: $e');
         }
       }
 
-      // Sort by name
       attendanceRecords.sort((a, b) => a.name.compareTo(b.name));
       return attendanceRecords;
 
@@ -637,7 +603,6 @@ class FirestoreScheduleService implements ScheduleService {
       dateStrings.add(_formatDateStr(d));
     }
 
-    // Chunk the date strings to avoid Firestore's 30-item limit for 'in' queries
     final dateChunks = _chunk(dateStrings, 30);
     final allAttendanceDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
 
@@ -683,7 +648,6 @@ class FirestoreScheduleService implements ScheduleService {
     required DateTime date,
   }) async {
     try {
-      // First, get all sessions for the day
       final (sessionsByDate, _) = await getSessionsForRange(
         userId: userId,
         role: role,
@@ -691,7 +655,6 @@ class FirestoreScheduleService implements ScheduleService {
         end: date,
       );
 
-      // Filter sessions by the requested status
       final allSessions = sessionsByDate[date] ?? [];
       return allSessions.where((session) => session.status == status).toList();
     } catch (e) {
@@ -723,7 +686,6 @@ class FirestoreScheduleService implements ScheduleService {
   }
 
   Future<List<Session>> _fetchIrregularStudentSchedule({required String uid, required ActiveTerm activeTerm}) async {
-    // This logic is copied from the attendance module for completeness.
     final query = _db.collectionGroup('enrolled_students').where(FieldPath.documentId, isEqualTo: uid);
     final enrolledSnap = await query.get();
     if (enrolledSnap.docs.isEmpty) return [];
@@ -758,14 +720,12 @@ class FirestoreScheduleService implements ScheduleService {
   }) async {
 
     try {
-      // Get the schedule reference - avoid collection group query that was causing issues
       final scheduleSnap = await _db.collectionGroup('schedules')
           .limit(10)
           .get();
 
       DocumentReference? scheduleRef;
 
-      // Find the schedule with matching ID
       for (final doc in scheduleSnap.docs) {
         if (doc.id == scheduleId) {
           scheduleRef = doc.reference;
@@ -777,14 +737,12 @@ class FirestoreScheduleService implements ScheduleService {
         return [];
       }
 
-      // Get enrolled students
       final enrolledStudentsSnap = await scheduleRef.collection('enrolled_students').get();
 
       if (enrolledStudentsSnap.docs.isEmpty) {
         return [];
       }
 
-      // Process enrolled students
       final students = <SectionStudent>[];
 
       for (final enrollDoc in enrolledStudentsSnap.docs) {
@@ -797,7 +755,6 @@ class FirestoreScheduleService implements ScheduleService {
           }
 
           QuerySnapshot<Map<String, dynamic>> studentQuery;
-          // First try 'id' field
           studentQuery = await _db.collection('users')
               .doc('student')
               .collection('accounts')
@@ -806,7 +763,6 @@ class FirestoreScheduleService implements ScheduleService {
               .get();
 
           if (studentQuery.docs.isEmpty) {
-            // Then try 'userId' field
             studentQuery = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')
@@ -816,7 +772,6 @@ class FirestoreScheduleService implements ScheduleService {
           }
 
           if (studentQuery.docs.isEmpty) {
-            // If still not found, try direct document lookup using the enrollment doc ID
             final directLookup = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')
@@ -829,20 +784,19 @@ class FirestoreScheduleService implements ScheduleService {
                 uid: directLookup.id,
                 name: _combineName(studentData, fallback: 'Unknown Student'),
                 photoURL: _strOrNull(studentData['photoURL']),
-                studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
+                studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']),
               ));
             } else {
               debugPrint("[Roster] Student not found for ID: $studentIdField");
             }
           } else {
-            // Student found via query
             final studentDoc = studentQuery.docs.first;
             final studentData = studentDoc.data();
             students.add(SectionStudent(
               uid: studentDoc.id,
               name: _combineName(studentData, fallback: 'Unknown Student'),
               photoURL: _strOrNull(studentData['photoURL']),
-              studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
+              studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']),
             ));
           }
         } catch (e) {
@@ -850,7 +804,6 @@ class FirestoreScheduleService implements ScheduleService {
         }
       }
 
-      // Sort students by name
       students.sort((a, b) => a.name.compareTo(b.name));
       return students;
 
@@ -885,7 +838,6 @@ class FirestoreScheduleService implements ScheduleService {
 
   @override
   Future<List<RoomSchedule>> fetchSchedulesForRoom({required String roomName, required DateTime forDate}) async {
-    // This logic remains the same.
     try {
       final dayKey = DateFormat('EEEE').format(forDate).toLowerCase();
 
@@ -919,7 +871,6 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // ============================ HELPERS (UPDATED) ============================
 
   List<List<T>> _chunk<T>(List<T> list, int chunkSize) {
     List<List<T>> chunks = [];
@@ -936,18 +887,15 @@ class FirestoreScheduleService implements ScheduleService {
   DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) {
-      // It's a Firestore Timestamp, convert it
       return value.toDate();
     }
     if (value is String && value.isNotEmpty) {
-      // It's a String, parse it
       try {
         return DateTime.parse(value);
       } catch (e) {
         return null;
       }
     }
-    // Not a type we recognize
     return null;
   }
 
@@ -956,19 +904,16 @@ class FirestoreScheduleService implements ScheduleService {
 
     final rawValue = statusValue.toString();
     final status = rawValue.toLowerCase().trim();
-    // First handle direct lowercase comparisons
     if (status == 'present') return AttendanceStatus.present;
     if (status == 'late') return AttendanceStatus.late;
     if (status == 'absent') return AttendanceStatus.absent;
     if (status == 'excused') return AttendanceStatus.excused;
 
-    // Then handle partial matches
     if (status.contains('present')) return AttendanceStatus.present;
     if (status.contains('late')) return AttendanceStatus.late;
     if (status.contains('absent')) return AttendanceStatus.absent;
     if (status.contains('excused')) return AttendanceStatus.excused;
 
-    // Special handling for ongoing status
     if (status == 'ongoing') {
       return AttendanceStatus.scheduled;
     }
@@ -976,13 +921,11 @@ class FirestoreScheduleService implements ScheduleService {
   }
 
   Future<ActiveTerm?> _findActiveTerm() async {
-    // Check cache first
     const cacheKey = 'activeTerm';
     if (_termCache.containsKey(cacheKey)) {
       return _termCache[cacheKey];
     }
 
-    // Fetch from Firestore if not in cache
     final yearSnap = await _db.collection('academic_years').where('status', isEqualTo: 'Active').limit(1).get();
     if (yearSnap.docs.isEmpty) return null;
 
@@ -1003,7 +946,6 @@ class FirestoreScheduleService implements ScheduleService {
         endDate: endDate
     );
 
-    // Store in cache
     _termCache[cacheKey] = term;
     return term;
   }
@@ -1020,7 +962,6 @@ class FirestoreScheduleService implements ScheduleService {
     final startStr = (data['startTime'] ?? data['timeStart'] ?? '').toString();
     final endStr = (data['endTime'] ?? data['timeEnd'] ?? '').toString();
 
-    // Combine subject code and name
     final subjectCode = _strOrNull(data['subjectCode']);
     final subjectNameStr = _strOrNull(data['subjectName']);
     String displaySubject = subjectNameStr ?? 'No Subject';
@@ -1077,8 +1018,14 @@ class FirestoreScheduleService implements ScheduleService {
 
   int _parseTimeToMinutes(String timeStr) {
     if (timeStr.isEmpty) return 0;
-    final fmts = ['HH:mm', 'H:mm', 'hh:mm a', 'h:mm a'];
-    for (final f in fmts) { try { final dt = DateFormat(f).parse(timeStr); return dt.hour * 60 + dt.minute; } catch (_) {} }
+    // Try 12-hour formats with AM/PM first, then fall back to 24-hour formats
+    final fmts = ['h:mm a', 'hh:mm a', 'H:mm', 'HH:mm'];
+    for (final f in fmts) {
+      try {
+        final dt = DateFormat(f). parse(timeStr);
+        return dt.hour * 60 + dt.minute;
+      } catch (_) {}
+    }
     return 0;
   }
 

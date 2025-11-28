@@ -3,8 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:project_agila/Service_Modules/Request/request_UI.dart';
 import 'package:project_agila/Service_Modules/Request/request_service.dart';
 
-// Helper class to parse request data safely.
-// This can be in the same file or moved to a separate helpers file.
 class _RequestDataParser {
   final Map<String, dynamic> data;
 
@@ -20,7 +18,6 @@ class _RequestDataParser {
   }
 
   void _parse() {
-    // --- Sender Parsing ---
     senderRole = data['role'] ?? '';
     if (senderRole.isEmpty) {
       final fromKey = data.keys.firstWhere((k) => k.startsWith('from') && k.endsWith('Id'), orElse: () => '');
@@ -35,7 +32,6 @@ class _RequestDataParser {
       senderName = (data['from${senderRoleKey}Name'] ?? 'Unknown').toString();
     }
 
-    // --- Recipient Parsing ---
     recipientRole = data['recipientRole'] ?? '';
     if (recipientRole.isEmpty) {
       final toKey = data.keys.firstWhere((k) => k.startsWith('to') && k.endsWith('Id'), orElse: () => '');

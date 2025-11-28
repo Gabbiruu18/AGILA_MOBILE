@@ -6,8 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:project_agila/Service_Modules/Schedule/schedule_service.dart';
-
 import '../Attendance/attendance_UI.dart';
+
 class ExportAttendancePDF extends StatelessWidget {
   final Session schedule;
   final InstructorDetails? teacher;

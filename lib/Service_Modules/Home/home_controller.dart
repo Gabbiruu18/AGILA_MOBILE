@@ -8,37 +8,30 @@ class HomeController extends ChangeNotifier {
   HomeController({HomeService? service}) : _service = service ?? HomeService();
   bool _isDisposed = false;
 
-  // ---------- Identity ----------
   late String role;
   late String uid;
   late String name = '';
 
-  // ---------- Role Checker ----------
   bool get isTeacherOrHead =>
       role == 'teacher' || role == 'program_head';
 
-  // ---------- Display chips / labels ----------
   String? courseRaw;
   String? departmentRaw;
   String? course;
   String? section;
   String? department;
 
-  // ---------- Notes & unread ----------
   String noteText = 'Tap to write notes';
   int unreadCount = 0;
   StreamSubscription<int>? _unreadSub;
 
-  // ---------- Loading & errors ----------
   bool isLoading = true;
   bool isLoadingSchedules = false;
   String? schedulesError;
 
-  // ---------- Today schedules exposed to UI ----------
   List<ScheduleItem> todaySchedules = const [];
   StreamSubscription<List<ScheduleItem>>? _schedulesSub;
 
-  // ---------- Chip Details Data ----------
   InstructorDetails? _instructorDetails;
   List<SectionStudent>? _sectionRoster;
   List<ScheduleItem>? _roomSchedule;
@@ -112,11 +105,9 @@ class HomeController extends ChangeNotifier {
   }
 
   Future<void> refreshToday() async {
-    // Re-initialize the stream for a manual refresh.
     initTodaySchedulesRealtime();
   }
 
-  // ----------------------- Chip Actions -----------------------
 
   Future<InstructorDetails?> viewInstructorDetails(String instructorId) async {
     _instructorDetails = await _service.fetchInstructorDetails(instructorId);
@@ -128,13 +119,11 @@ class HomeController extends ChangeNotifier {
     return _sectionRoster;
   }
 
-  // **THE FIX**: Pass today's date to the service.
   Future<List<ScheduleItem>?> viewRoomSchedule(String roomName) async {
     _roomSchedule = await _service.fetchSchedulesForRoom(roomName: roomName, forDate: DateTime.now());
     return _roomSchedule;
   }
 
-  // ----------------------- Notes actions -----------------------
 
   Future<void> saveNote(BuildContext context, String text) async {
     final newText = text.trim();
@@ -173,8 +162,6 @@ class HomeController extends ChangeNotifier {
     _schedulesSub?.cancel();
     super.dispose();
   }
-
-  // ----------------------- Helpers -----------------------
 
   String _toAcronym(String input, {bool removeStopWords = true, int? maxLetters}) {
     final trimmed = input.trim();

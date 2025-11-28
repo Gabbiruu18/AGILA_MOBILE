@@ -37,7 +37,6 @@ class OpeningScreenState extends State<OpeningScreen>
         if (doc.exists && doc.data() != null) {
           final data = doc.data()!;
           if (data.containsKey('passcode') && (data['passcode'] as String).isNotEmpty) {
-            // Found a passcode, so we can quick login.
             return true;
           }
         }
@@ -59,13 +58,9 @@ class OpeningScreenState extends State<OpeningScreen>
 
     bool canQuickLogin = false;
     if (rememberMe && rememberedUid != null) {
-      // 1. Check for biometrics enabled on this device (fastest check).
       final hasBiometrics = prefs.getBool('biometric_enabled_for_uid_$rememberedUid') ?? false;
-
-      // 2. Check for a passcode. This is more reliable as it checks Firestore.
       final hasPasscode = await _checkFirestoreForPasscode(rememberedUid);
 
-      // If EITHER ONE is true, the user can use the quick login screen.
       if (hasPasscode || hasBiometrics) {
         canQuickLogin = true;
       }

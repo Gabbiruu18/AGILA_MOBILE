@@ -130,7 +130,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // We need to find the user's role to properly log them out.
       const roles = ['student', 'teacher', 'program_head'];
       String? userRole;
       for (final role in roles) {
@@ -142,10 +141,8 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
 
       if (userRole != null && mounted) {
-        // Call the proper logout function which handles everything
         await AuthServices.logout(context, userRole, rememberedUid!);
       } else {
-        // Fallback in case user role isn't found (clears local data and navigates)
         final prefs = await SharedPreferences.getInstance();
         await prefs.remove('rememberMe');
         await prefs.remove('rememberedEmail');
@@ -154,7 +151,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
     } catch (e) {
       debugPrint("Error switching account: $e");
-      // Ensure user is still navigated away on error
       if (mounted) Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
     } finally {
       if (mounted) {
@@ -279,7 +275,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
 
       if (authorized && mounted) {
-        // After a successful quick login, check if the FCM token needs an update.
         await _updateFCMToken(userRole!, rememberedUid!);
 
         Navigator.pushReplacement(
@@ -303,7 +298,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       }
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Quick login failed: ${e.toString()}")));
-      // On failure, perform a full logout to force a fresh login
       await _handleSwitchAccount();
     } finally {
       if (mounted) {
@@ -319,7 +313,6 @@ class _QuickLoginScreenState extends State<QuickLoginScreen> {
       barrierDismissible: false,
       builder: (_) => const TermsDialog(),
     ).then((_) {
-      // When dialog is closed, reload the terms acceptance state
       _loadInitialState();
     });
   }
