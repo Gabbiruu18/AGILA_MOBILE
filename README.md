@@ -1,57 +1,125 @@
-fixed bugs and errors
+# AGILA Mobile
 
-**NEED TO DO:**
+AGILA Mobile is a Flutter application for the AGILA platform. It provides role-based mobile experiences for students, teachers, and program heads, including authentication, schedules, attendance, requests, profiles, notifications, and mobile security features.
 
-**No more Face Registration and Face Recognition screen**
+## Features
 
-**Notifications:** Request sent and received notification shows
+- Student and teacher authentication flows
+- Quick login with passcode and biometric authentication
+- Student attendance viewing and attendance details
+- Teacher schedules and enrolled-student information
+- Home dashboard with dates, notes, and daily schedules
+- Requests between students, teachers, and faculty
+- User profiles with profile-picture support
+- Light and dark theme support
+- Firebase Cloud Messaging and local notifications
+- Firebase Authentication, Cloud Firestore, Cloud Storage, and Cloud Functions integration
+- PDF generation and printing support
+- Notification, camera, photo, storage, and location permission handling
 
-    To do: Add notification for incoming class and attendance status.
+## Technology Stack
 
-**All screens are DARK MODE ready, can use system theme.**
+- **Flutter / Dart**
+- **Firebase**: Authentication, App Check, Cloud Firestore, Cloud Messaging, Cloud Storage, and Cloud Functions
+- **Local authentication**: Passcode and fingerprint/biometric support
+- **Android and iOS** platform support
 
-**ADDED SCREENS**
-- **HOME** - Date and notes added, Student and Teachers Today's Schedule are showing, but adjust and tweaks on the UI.
-  Enrolled Subjects for  today is now available.
+## Requirements
 
-- **ATTENDANCE(Student)** Enrolled subjects Schedules fetching, Attendance is now being fetch.
-  ADDED: Excused card UI, Attendance details.
+Before getting started, install:
 
-            Enrolled Students list of subject schedule are now showing.
+- Flutter SDK compatible with Dart SDK `^3.7.0`
+- Android Studio and/or Xcode
+- A configured Android or iOS device or emulator
+- Access to the project's Firebase configuration
 
-- **SCHEDULE(teacher)** it is now showing all data, but a few more UI Tweaks and some 
-  Data logic fetching need some fixes. and waiting if the teachers need to see their attendance too.
-  TO DO: Use Attendance Card UI.
+Verify your Flutter installation with:
 
-- **Request** - (Students)Can request to all available teachers, Not subject teachers only.
-  (Teachers) Can request to other available teachers and faculty.
-  Now when someone use web to request, it appears in mobile too.
-  meaning web and mobile request are now connected.
+```bash
+flutter doctor
+```
 
-            To do: add remove button to go to history.dart
+## Getting Started
 
-- **Profile** - New UI, Contact No. applied, add and show Profile Pic both teacher
-  and students, need confirmation on logout. Add Turn Off Notification,
-  Settings Button Added, passcode and fingerprint are toggle added.
-  alarm sound or custom alarm sound are in the mobile app's settings.
+1. Clone the repository:
 
-            passcode stores in firebase, it can be use in other mobiles.
-            fingerprint store in local meaning only on the device.
+   ```bash
+   git clone https://github.com/Gabbiruu18/AGILA_MOBILE.git
+   cd AGILA_MOBILE
+   ```
 
-**Main screens**
--
-            if Fingerprint is available, it will show the Fingerprint Availability message
+2. Install dependencies:
 
-Fix bugs: Black screen when opening the app again even it runs on the background.
+   ```bash
+   flutter pub get
+   ```
 
-- **Login** - integrate AGILA LOgo
+3. Configure Firebase for the target platforms.
 
-- **Quick Login** - The app will ask the user to if they want to register a passcode or fingerprint.
-  passcode stores in firebase, even the user doesn't click remember me the app will still ask for a passcode but they can skip it.
-  biometrics stores in local sharedReference, it will be shown if the user click remember me.
+   Add the appropriate Firebase configuration files and ensure Firebase services are enabled for the project. Do not commit private credentials or production secrets to the repository.
 
-- **Opening** - Logo Integrated
+4. Run the application:
 
+   ```bash
+   flutter run
+   ```
 
+## Useful Commands
 
+```bash
+# Check the project and installed tooling
+flutter doctor
 
+# Install or update Dart and Flutter dependencies
+flutter pub get
+
+# Run static analysis
+flutter analyze
+
+# Run tests
+flutter test
+
+# Build an Android APK
+flutter build apk
+
+# Build an Android App Bundle
+flutter build appbundle
+
+# Build an iOS application
+flutter build ios
+```
+
+## Project Structure
+
+```text
+lib/
+├── Screens/          # Opening, login, theme, and other UI screens
+├── Service_Modules/  # Home, notification, and application service modules
+└── main.dart         # Application entry point and route configuration
+assets/               # ML models, logos, and image assets
+android/              # Android platform configuration
+ios/                  # iOS platform configuration
+```
+
+## Configuration Notes
+
+The application requests access to camera, storage, photos, location, and notification services depending on the platform and enabled features. Review the platform permission configuration before creating a production release.
+
+Firebase App Check and notification providers should use production-ready providers and credentials for release builds. Debug providers are intended only for development and testing.
+
+## Development Status
+
+AGILA Mobile is under active development. Some screens and workflows may still require UI improvements, data-fetching fixes, and additional notification behavior.
+
+## Contributing
+
+1. Create a feature branch from `main`.
+2. Make your changes and run `flutter analyze` and relevant tests.
+3. Submit a pull request describing the change and any required Firebase or platform configuration.
+
+## License
+
+No license has been specified for this repository. Contact the repository owner before redistributing or using the project outside its intended environment.
+
+## Author
+**John Gabriel Purificacion**
