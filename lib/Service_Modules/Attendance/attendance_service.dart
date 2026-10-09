@@ -153,7 +153,6 @@ class FirestoreAttendanceService implements AttendanceService {
         activeTerm: activeTerm
     );
 
-    // Fetch attendance data for these sessions
     allSessions = await _enrichSessionsWithAttendanceData(allSessions, userId, start, end);
 
     final results = <DateTime, List<Session>>{};
@@ -529,7 +528,6 @@ class FirestoreAttendanceService implements AttendanceService {
 
 
           QuerySnapshot<Map<String, dynamic>> studentQuery;
-          // First try 'id' field
           studentQuery = await _db.collection('users')
               .doc('student')
               .collection('accounts')
@@ -538,7 +536,6 @@ class FirestoreAttendanceService implements AttendanceService {
               .get();
 
           if (studentQuery.docs.isEmpty) {
-            // Then try 'userId' field
             studentQuery = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')
@@ -548,7 +545,6 @@ class FirestoreAttendanceService implements AttendanceService {
           }
 
           if (studentQuery.docs.isEmpty) {
-            // If still not found, try direct document lookup using the enrollment doc ID
             final directLookup = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')

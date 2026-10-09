@@ -23,11 +23,11 @@ ThemeData _base(Brightness b, {required Color primary, required Color secondary}
     seedColor: primary,
     brightness: b,
   ).copyWith(
-    primary:   primary,
+    primary: primary,
     secondary: secondary,
-    surface:   neutralSurface,         // <- make surface neutral
-    // (optional) also cool down the variant if you want less tint on dividers, etc.
-    surfaceVariant: isDark ? const Color(0xFF1E2430) : const Color(0xFFECEFF3),
+    surface: neutralSurface,
+    outlineVariant: isDark ? const Color(0xFF373E4D) : const Color(0xFFE2E8F0),
+    surfaceContainerHighest: isDark ? const Color(0xFF1E2430) : const Color(0xFFECEFF3),
   );
 
   // Poppins everywhere
@@ -60,14 +60,12 @@ ThemeData _base(Brightness b, {required Color primary, required Color secondary}
 
     // IMPORTANT: kill the blue elevation tint + force neutral card bg
     cardColor: cardBg,
-    cardTheme: CardTheme(
-      color: cardBg,
-      surfaceTintColor: Colors
-          .transparent, // <- removes primary/blue tint on elevated surfaces
+    cardTheme: CardThemeData(
+      color: isDark ? const Color(0xFF1B202A) : Colors.white,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        // neutral outline (not blue)
         side: BorderSide(
           color: scheme.outlineVariant.withOpacity(isDark ? 0.6 : 0.7),
           width: 1.2,
@@ -103,7 +101,7 @@ ThemeData _base(Brightness b, {required Color primary, required Color secondary}
     ),
 
     // Also neutralize surface tint on dialogs & sheets to avoid blue cast
-    dialogTheme: DialogTheme(
+    dialogTheme: DialogThemeData(
       backgroundColor: cardBg,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
