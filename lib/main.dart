@@ -13,31 +13,26 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
 import 'Service_Modules/Notification/notification_service.dart';
 
 final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
 
 Future<void> setupForegroundNotifications() async {
-  // 1. Create a Notification Channel for Android (required for Android 8.0+)
   const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'high_importance_channel', // A unique ID for the channel
-    'High Importance Notifications', // A user-visible name for the channel
+    'high_importance_channel',
+    'High Importance Notifications',
     description: 'This channel is used for important notifications.',
     importance: Importance.high,
   );
 
-  // 2. Initialize the local notifications plugin
   await flutterLocalNotificationsPlugin
       .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
       ?.createNotificationChannel(channel);
 
-  // 3. Set up the listener for incoming foreground messages
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
     RemoteNotification? notification = message.notification;
     AndroidNotification? android = message.notification?.android;
 
-    // If the message has a notification payload, show it as a local notification
     if (notification != null && android != null) {
       flutterLocalNotificationsPlugin.show(
         notification.hashCode,
@@ -48,7 +43,6 @@ Future<void> setupForegroundNotifications() async {
             channel.id,
             channel.name,
             channelDescription: channel.description,
-            // IMPORTANT: 'launch_background' must be a file in android/app/src/main/res/drawable
             icon: 'launch_background',
           ),
         ),
@@ -56,8 +50,6 @@ Future<void> setupForegroundNotifications() async {
     }
   });
 }
-
-// NEW: FCM Token Manager class
 class FCMTokenManager {
   static Future<void> cleanupTokenIfNeeded() async {
     try {
@@ -66,8 +58,6 @@ class FCMTokenManager {
       final uid = prefs.getString('rememberedUid');
 
       if (!rememberMe && uid != null) {
-        // User didn't choose "Remember Me" - clean up their FCM token
-        debugPrint('App closing without Remember Me - cleaning up FCM token');
         await _cleanupFCMToken(uid);
       }
     } catch (e) {
@@ -87,9 +77,8 @@ class FCMTokenManager {
 
         final doc = await docRef.get();
         if (doc.exists) {
-          // Found user document - remove FCM token
           await docRef.update({
-            'fcmToken': FieldValue.delete(), // Completely removes the field
+            'fcmToken': FieldValue.delete(),
             'updatedAt': FieldValue.serverTimestamp(),
           });
           debugPrint('FCM token deleted for user: $uid in role: $role');
@@ -102,14 +91,11 @@ class FCMTokenManager {
   }
 }
 
-// -------------------------------------------------------------------------
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  // --- ADDED: Call the setup function when the app starts ---
   await setupForegroundNotifications();
-  // -------------------------------------------------------
-  // --- 2. SECURITY NOTE FOR PRODUCTION ---
+
   await FirebaseAppCheck.instance.activate(
     webProvider: ReCaptchaV3Provider('AIzaSyBaNdA2VaJHPh_wep9DtZjDluUzmTDzsKU'),
     androidProvider: AndroidProvider.debug,
@@ -153,7 +139,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.detached || state == AppLifecycleState.paused) {
-      // App is closing or going to background
       FCMTokenManager.cleanupTokenIfNeeded();
     }
   }

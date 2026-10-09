@@ -36,9 +36,6 @@ class _HomeScreenState extends State<HomeScreen> {
     controller.init(
       role: widget.role,
       uid: widget.uid,
-      // **REMOVED**: These are no longer needed here
-      // firstName: widget.firstName,
-      // lastName: widget.lastName,
     );
   }
 
@@ -82,8 +79,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- MODIFIED: Show details in a sliding panel ---
-
   void _showScheduleDetails(ScheduleItem item) {
     _showSlidingPanel(
       title: item.subjectName,
@@ -120,12 +115,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- NEW: Reusable Bottom Sheet Handlers ---
-
   void _showSlidingPanel({required String title, required Widget content}) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // Allows sheet to grow
+      isScrollControlled: true,
       builder: (context) => SlidingPanel(title: title, child: content),
     );
   }
@@ -168,7 +161,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       body: SafeArea(
         child: controller.isLoading
-            ? const HomeSkeletonLoading() // Use skeleton loading instead
+            ? const HomeSkeletonLoading()
             : RefreshIndicator(
           onRefresh: controller.refreshToday,
           child: SingleChildScrollView(
@@ -217,12 +210,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildScheduleSection() {
-    // If schedules are still loading, show a spinner.
     if (controller.isLoadingSchedules) {
       return const ScheduleSkeletonLoading();
     }
 
-    // If there was an error, display it clearly.
     if (controller.schedulesError != null) {
       return Card(
         color: Colors.red[50],
@@ -245,8 +236,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-
-    // Otherwise, build the correct card for the user role.
     return controller.isTeacherOrHead
         ? TeacherScheduleCard(
       items: controller.todaySchedules,
@@ -265,17 +254,4 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
-// Add this helper method
-//   int _parseTimeToMinutes(String timeStr) {
-//     if (timeStr.isEmpty) return 0;
-//     final fmts = ['HH:mm', 'H:mm', 'hh:mm a', 'h:mm a'];
-//     for (final f in fmts) {
-//       try {
-//         final dt = DateFormat(f).parse(timeStr);
-//         return dt.hour * 60 + dt.minute;
-//       } catch (_) {}
-//     }
-//     return 0;
-//   }
 }

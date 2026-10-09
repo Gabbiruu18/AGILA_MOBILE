@@ -6,8 +6,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:project_agila/Service_Modules/Schedule/schedule_service.dart';
-
 import '../Attendance/attendance_UI.dart';
+
 class ExportAttendancePDF extends StatelessWidget {
   final Session schedule;
   final InstructorDetails? teacher;
@@ -106,7 +106,7 @@ class ExportAttendancePDF extends StatelessWidget {
 
     // Format functions
     String fmtClock(DateTime? ts) {
-      if (ts == null) return "—";
+      if (ts == null) return "-";
       final d = ts;
       int h = d.hour;
       final m = d.minute;
@@ -239,7 +239,7 @@ class ExportAttendancePDF extends StatelessWidget {
                             _buildCell(teacher?.name ?? schedule.instructorName ?? "Instructor"),
                             _buildCell(fmtClock(schedule.firstSeen)),
                             _buildCell(fmtClock(schedule.lastSeen)),
-                            _buildCell(schedule.source ?? "—"),
+                            _buildCell(schedule.source == "No attendance session created" ? "-" : schedule.source ?? "-"),
                             _buildCell(statusText(schedule.status)),
                           ]
                       ),
@@ -296,14 +296,14 @@ class ExportAttendancePDF extends StatelessWidget {
                         // Get attendance info or default values
                         final timeIn = attendanceRecord?.firstSeen != null
                             ? fmtClock(attendanceRecord!.firstSeen)
-                            : "—";
+                            : "-";
                         final lastSeen = attendanceRecord?.lastSeen != null
                             ? fmtClock(attendanceRecord!.lastSeen)
-                            : "—";
-                        final source = attendanceRecord?.source ?? "—";
+                            : "-";
+                        final source = attendanceRecord?.source ?? "-";
                         final status = attendanceRecord != null
                             ? statusText(attendanceRecord.status)
-                            : "—";
+                            : "-";
 
                         return pw.TableRow(
                             children: [
@@ -372,6 +372,11 @@ class ExportAttendancePDF extends StatelessWidget {
   }
 
   String statusText(AttendanceStatus st) {
-    return st.name[0].toUpperCase() + st.name.substring(1);
+    switch (st) {
+      case AttendanceStatus.none:
+        return "-";
+      default:
+        return st.name[0].toUpperCase() + st.name.substring(1);
+    }
   }
 }

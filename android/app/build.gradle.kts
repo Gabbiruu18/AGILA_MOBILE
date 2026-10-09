@@ -18,7 +18,6 @@ dependencies {
     implementation ("androidx.core:core:1.15.0")
     //implementation ("com.google.mediapipe:solution-core:latest.release")
     //implementation ("com.google.mediapipe:face_detection:latest.release")
-    implementation ("com.google.mediapipe:tasks-vision:0.10.21")
     coreLibraryDesugaring ("com.android.tools:desugar_jdk_libs:2.1.2")
 
 }
@@ -68,7 +67,8 @@ android {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("debug");
+            
         }
     }
 }

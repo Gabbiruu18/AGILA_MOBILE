@@ -4,8 +4,6 @@ import 'package:project_agila/Service_Modules/Schedule/schedule_pdf_export.dart'
 import 'schedule_service.dart';
 import 'schedule_controller.dart';
 
-// ============================ HELPERS ============================
-
 String _d2(int n) => n.toString().padLeft(2, '0');
 String fmtTime(int minutes) {
   if (minutes < 0) return "N/A";
@@ -33,9 +31,9 @@ BoxDecoration cardDeco(BuildContext context, {Color? bg}) {
 
 Color statusBg(AttendanceStatus st) {
   switch (st) {
-    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF); // Blue for scheduled
+    case AttendanceStatus.scheduled: return const Color(0xFFDCECFF);
     case AttendanceStatus.present:   return const Color(0xFFDCF5E7);
-    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF); // Light blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFFE6F9FF);
     case AttendanceStatus.late:      return const Color(0xFFFFF1CC);
     case AttendanceStatus.absent:    return const Color(0xFFFFE0E0);
     case AttendanceStatus.none:    return const Color(0xFFE0E0E0);
@@ -47,7 +45,7 @@ Color statusFg(AttendanceStatus st) {
   switch (st) {
     case AttendanceStatus.scheduled: return const Color(0xFF0058CE);
     case AttendanceStatus.present:   return const Color(0xFF1E7E34);
-    case AttendanceStatus.excused:   return const Color(0xFF0096C7); // Blue for excused
+    case AttendanceStatus.excused:   return const Color(0xFF0096C7);
     case AttendanceStatus.late:      return const Color(0xFF9A6B00);
     case AttendanceStatus.absent:    return const Color(0xFFB3261E);
     case AttendanceStatus.none:      return const Color(0xFF616161);
@@ -151,10 +149,8 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    // This layout is more robust and prevents overflows.
     return Row(
       children: [
-        // Left-side widget (either the Today button or an empty box for balance)
         SizedBox(
           width: 90,
           child: showTodayButton
@@ -165,17 +161,14 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
               : null,
         ),
 
-        // The flexible center part that expands and shrinks
         Expanded(
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                // Use the new showPrev flag to enable/disable the button
                 onPressed: showPrev ? onPrev : null,
                 icon: Icon(Icons.chevron_left, color: showPrev ? cs.onSurface : cs.onSurface.withOpacity(0.38)),
               ),
-              // Make the label flexible to prevent overflow
               Flexible(
                 child: InkWell(
                   onTap: onLabelTap,
@@ -185,7 +178,7 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
                     child: Text(
                       label,
                       textAlign: TextAlign.center,
-                      overflow: TextOverflow.ellipsis, // Prevent long text from overflowing
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                         color: cs.primary,
@@ -201,8 +194,6 @@ class EnhancedPeriodSwitcher extends StatelessWidget {
             ],
           ),
         ),
-
-        // Right-side empty box to balance the layout
         const SizedBox(width: 90),
       ],
     );
@@ -246,7 +237,6 @@ class StatCard extends StatelessWidget {
         ),
         child: Row(
           children: [
-            // Left side with icon and label
             Row(
               children: [
                 CircleAvatar(
@@ -265,10 +255,8 @@ class StatCard extends StatelessWidget {
               ],
             ),
 
-            // Expanded space to push the number to the right
             const Spacer(),
 
-            // Right side with the count number
             Text(
               "$value",
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -318,27 +306,30 @@ class DailyListScheduleLike extends StatelessWidget {
       return Container(padding: const EdgeInsets.all(16), decoration: cardDeco(context), child: const Center(child: Text("No classes scheduled for this day.")));
     }
 
-    // Flatten the groups into a single list of sessions
-    final items = groups.expand((g) => g.sessions).toList();
-    items.sort((a,b) => a.startMinutes.compareTo(b.startMinutes));
+    groups.sort((a, b) {
+      final aStart = a.sessions.firstOrNull?.startMinutes ?? 0;
+      final bStart = b.sessions.firstOrNull?.startMinutes ?? 0;
+      return aStart.compareTo(bStart);
+    });
 
     return ListView.separated(
-      itemCount: items.length,
+      itemCount: groups.length,
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (ctx, i) {
-        final session = items[i];
+        final group = groups[i];
+        final firstSession = group.sessions.first;
+
+        final roomTypes = group.sessions.map((s) => s.roomType).toSet().join(', ');
+
         return TodayScheduleCard(
-          subject: session.subject,
-          roomType: session.roomType,
-          section: session.section,
-          room: session.room,
-          timeLabel: fmtRange(session.startMinutes, session.endMinutes),
-          status: session.status,
-          source: session.source,
-          accentColor: _subjectAccent(session.subject),
-          onViewDetails: () => onViewDetails(session),
+          subject: firstSession.subject,
+          roomType: roomTypes,
+          section: firstSession.section,
+          sessions: group.sessions,
+          accentColor: _subjectAccent(firstSession.subject),
+          onViewDetails: () => onViewDetails(firstSession),
         );
       },
     );
@@ -391,7 +382,6 @@ class WeeklyList extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
 
-                // Add a summary of attendance
                 Text(
                   "Attendance: ${item.attended}/${item.total}",
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -401,14 +391,12 @@ class WeeklyList extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
 
-                // Create a row for each room type
                 ...roomTypes.map((roomType) {
                   final statuses = item.getStatusesForRoomType(roomType);
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 8.0),
                     child: Row(
                       children: [
-                        // Room type label
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
@@ -424,19 +412,16 @@ class WeeklyList extends StatelessWidget {
                         ),
                         const SizedBox(width: 8),
 
-                        // Status indicators for each day
                         ...List.generate(6, (dayIndex) {
-                          // Safely get the status, defaulting to null if out of bounds.
                           final status = (dayIndex < statuses.length) ? statuses[dayIndex] : null;
                           final weekday = dayIndex + 1;
 
-                          // If status is null, it means there's no session on this day for this room type.
                           if (status == null) {
                             return Container(
                               margin: const EdgeInsets.only(right: 6),
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade200, // A neutral background
+                                color: Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
@@ -444,7 +429,7 @@ class WeeklyList extends StatelessWidget {
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                   fontSize: 11,
                                   fontWeight: FontWeight.w700,
-                                  color: Colors.grey.shade500, // A dimmer text color
+                                  color: Colors.grey.shade500,
                                 ),
                               ),
                             );
@@ -507,7 +492,6 @@ class MonthlyList extends StatelessWidget {
       );
     }
 
-    // Group items by subject
     final bySubject = <String, List<SubjectTotals>>{};
     for (final item in items) {
       bySubject.putIfAbsent(item.subjectDisplay, () => []).add(item);
@@ -599,31 +583,29 @@ Color _subjectAccent(String subject) {
 }
 
 class TodayScheduleCard extends StatelessWidget {
-  final String subject, roomType, section, room, timeLabel;
-  final AttendanceStatus status;
+  final String subject, roomType, section;
+  final List<Session> sessions;
   final Color accentColor;
   final VoidCallback? onViewDetails;
-  final String? source;
 
   const TodayScheduleCard({
     super.key,
     required this.subject,
     required this.section,
-    required this.room,
-    required this.timeLabel,
-    required this.status,
+    required this.sessions,
     required this.accentColor,
     this.onViewDetails,
     required this.roomType,
-    this.source,
   });
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final sLabel = statusText(status);
-    final sBg = statusBg(status);
-    final sFg = statusFg(status);
+
+    final firstSession = sessions.first;
+    final sLabel = statusText(firstSession.status);
+    final sBg = statusBg(firstSession.status);
+    final sFg = statusFg(firstSession.status);
 
     return Material(
       color: cs.surface,
@@ -654,15 +636,18 @@ class TodayScheduleCard extends StatelessWidget {
                       Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: sBg, borderRadius: BorderRadius.circular(999)), child: Text(sLabel, style: Theme.of(context).textTheme.labelSmall?.copyWith(color: sFg, fontWeight: FontWeight.w600, fontSize: 12))),
                     ]),
                     const SizedBox(height: 6),
-                    Row(children: [
-                      Icon(Icons.meeting_room, size: 16, color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text(room),
-                      const SizedBox(width: 12),
-                      Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
-                      const SizedBox(width: 4),
-                      Text(timeLabel, style: TextStyle(color: cs.onSurfaceVariant)),
-                    ]),
+                    ...sessions.map((session) => Padding(
+                      padding: const EdgeInsets.only(top: 4.0),
+                      child: Row(children: [
+                        Icon(Icons.meeting_room, size: 16, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(session.room),
+                        const SizedBox(width: 12),
+                        Icon(Icons.access_time, size: 14, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 4),
+                        Text(fmtRange(session.startMinutes, session.endMinutes), style: TextStyle(color: cs.onSurfaceVariant)),
+                      ]),
+                    )),
                     const SizedBox(height: 10),
                     SizedBox(width: double.infinity, child: OutlinedButton.icon(icon: const Icon(Icons.visibility_outlined), label: const Text('View Details'), onPressed: onViewDetails)),
                   ],
@@ -681,7 +666,7 @@ class SessionDetailsPanel extends StatelessWidget {
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
   final DateTime selectedDate;
-  final ActiveTerm? activeTerm; // Add this parameter
+  final ActiveTerm? activeTerm;
 
   const SessionDetailsPanel({
     super.key,
@@ -689,7 +674,7 @@ class SessionDetailsPanel extends StatelessWidget {
     required this.fetchStudents,
     required this.fetchInstructor,
     required this.selectedDate,
-    this.activeTerm, // Add this parameter
+    this.activeTerm,
   });
 
   @override
@@ -699,35 +684,34 @@ class SessionDetailsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Export PDF button with instructor details
-          FutureBuilder<InstructorDetails?>(
-            future: fetchInstructor(),
-            builder: (context, instructorSnapshot) {
-              return FutureBuilder<List<SectionStudent>>(
-                future: fetchStudents(),
-                builder: (context, studentsSnapshot) {
-                  if (studentsSnapshot.connectionState == ConnectionState.waiting ||
-                      instructorSnapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+          Center(
+            child: FutureBuilder<InstructorDetails?>(
+              future: fetchInstructor(),
+              builder: (context, instructorSnapshot) {
+                return FutureBuilder<List<SectionStudent>>(
+                  future: fetchStudents(),
+                  builder: (context, studentsSnapshot) {
+                    if (studentsSnapshot.connectionState == ConnectionState.waiting ||
+                        instructorSnapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                  return ExportAttendancePDF(
-                    schedule: session,
-                    teacher: instructorSnapshot.data,
-                    employeeNumber: instructorSnapshot.data?.employeeNumber,
-                    students: studentsSnapshot.data ?? [],
-                    dateStr: DateFormat('yyyy-MM-dd').format(selectedDate),
-                    disabled: !studentsSnapshot.hasData,
-                    activeTerm: activeTerm,
-                  );
-                },
-              );
-            },
+                    return ExportAttendancePDF(
+                      schedule: session,
+                      teacher: instructorSnapshot.data,
+                      employeeNumber: instructorSnapshot.data?.employeeNumber,
+                      students: studentsSnapshot.data ?? [],
+                      dateStr: DateFormat('yyyy-MM-dd').format(selectedDate),
+                      disabled: !studentsSnapshot.hasData,
+                      activeTerm: activeTerm,
+                    );
+                  },
+                );
+              },
+            ),
           ),
 
           const SizedBox(height: 16),
-
-          // Rest of the content
           _SessionDetailsContent(
             session: session,
             fetchStudents: fetchStudents,
@@ -744,18 +728,17 @@ class _SessionDetailsContent extends StatelessWidget {
   final Session session;
   final Future<List<SectionStudent>> Function() fetchStudents;
   final Future<InstructorDetails?> Function() fetchInstructor;
-  final DateTime selectedDate; // Add this field
+  final DateTime selectedDate;
 
   const _SessionDetailsContent({
     required this.session,
     required this.fetchStudents,
     required this.fetchInstructor,
-    required this.selectedDate, // Add this parameter
+    required this.selectedDate,
   });
 
   @override
   Widget build(BuildContext context) {
-    // Get attendance status color and label
     final sBg = statusBg(session.status);
     final sFg = statusFg(session.status);
     final sLabel = statusText(session.status);
@@ -767,7 +750,6 @@ class _SessionDetailsContent extends StatelessWidget {
         Text(session.section, style: Theme.of(context).textTheme.titleSmall),
         const Divider(height: 24),
 
-        // Special message for "No attendance session created" case
         if (session.source == "No attendance session created")
           Container(
             padding: const EdgeInsets.all(12),
@@ -791,7 +773,6 @@ class _SessionDetailsContent extends StatelessWidget {
             ),
           ),
 
-        // Attendance status chip
         if (session.status != AttendanceStatus.scheduled) ...[
           Row(
             children: [
@@ -827,7 +808,6 @@ class _SessionDetailsContent extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          // Attendance details
           if (session.source != null && session.source != "No attendance session created")
             _kv(context, Icons.source, 'Source', session.source!),
           if (session.firstSeen != null)
@@ -847,7 +827,6 @@ class _SessionDetailsContent extends StatelessWidget {
 
         const Divider(height: 24),
 
-        // Replace TabBar with just the Classmates section
         SizedBox(
           height: 300,
           child: Column(
@@ -867,10 +846,8 @@ class _SessionDetailsContent extends StatelessWidget {
                         return const ErrorContent(error: "No Class list found.");
                       }
 
-                      // Format the selected date to use for attendance lookup
                       final dateStr = DateFormat('yyyy-MM-dd').format(selectedDate);
 
-                      // Pass the formatted date string to the section roster content
                       return _SectionRosterContent(
                         students: snapshot.data!,
                         session: session,
@@ -907,19 +884,8 @@ class SlidingPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Center(
-            child: Container(
-              width: 40,
-              height: 5,
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -951,7 +917,7 @@ class SlidingPanel extends StatelessWidget {
 class LoadingContent extends StatelessWidget {
   const LoadingContent({super.key});
   @override
-  Widget build(BuildContext context) => const Center(child: Padding(padding: EdgeInsets.all(32.0), child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('Fetching details...')])));
+  Widget build(BuildContext context) => const Center(child: Padding(padding: const EdgeInsets.all(32.0), child: Column(mainAxisSize: MainAxisSize.min, children: [CircularProgressIndicator(), SizedBox(height: 16), Text('Fetching details...')])));
 }
 
 class ErrorContent extends StatelessWidget {
@@ -963,12 +929,12 @@ class ErrorContent extends StatelessWidget {
 class _SectionRosterContent extends StatefulWidget {
   final List<SectionStudent> students;
   final Session session;
-  final String dateStr; // Change this to String type
+  final String dateStr;
 
   const _SectionRosterContent({
     required this.students,
     required this.session,
-    required this.dateStr, // Update parameter type
+    required this.dateStr,
   });
 
   @override
@@ -988,14 +954,12 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
 
   Future<void> _loadAttendance() async {
     try {
-      // Use the dateStr provided from parent widget
-      // This contains the selected date from the UI, not today's date
+
       final actualDateStr = widget.dateStr;
-      // Use dependency injection to get the service
       final service = FirestoreScheduleService();
       final records = await service.fetchStudentAttendanceForSession(
         scheduleId: widget.session.id,
-        dateStr: actualDateStr, // Use the provided date string
+        dateStr: actualDateStr,
       );
 
       if (mounted) {
@@ -1029,7 +993,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
       return Center(child: Text("Error loading attendance: $error"));
     }
 
-    // Create a map for quick lookups of attendance by student ID
     final attendanceMap = <String, StudentAttendanceRecord>{};
     if (attendanceRecords != null) {
       for (final record in attendanceRecords!) {
@@ -1041,7 +1004,6 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
       itemCount: widget.students.length,
       itemBuilder: (context, index) {
         final student = widget.students[index];
-        // Look up attendance for this student
         final attendanceRecord = attendanceMap[student.uid];
         final hasAttendance = attendanceRecord != null;
 
@@ -1095,6 +1057,301 @@ class _SectionRosterContentState extends State<_SectionRosterContent> {
   }
 }
 
+class WeeklyDetailsPanel extends StatelessWidget {
+  final SubjectWeekItem item;
+  final ScheduleController controller;
+
+  const WeeklyDetailsPanel({
+    super.key,
+    required this.item,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selfAttendance = controller.state.weeklyDetails
+        .where((s) => s.subject == item.subjectDisplay)
+        .toList();
+
+    return SlidingPanel(
+      title: item.subjectDisplay,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _kv(context, Icons.pie_chart_outline, 'Total Attendance', '${item.attended}/${item.total}'),
+          const Divider(height: 24),
+          LinedTitle("My Attendance"),
+          const SizedBox(height: 8),
+          for (final session in selfAttendance)
+            ListTile(
+              leading: Icon(Icons.class_outlined, color: statusFg(session.status)),
+              title: Text(DateFormat('EEEE, MMM d').format(session.updatedAt ?? DateTime.now())),
+              subtitle: Text(fmtRange(session.startMinutes, session.endMinutes)),
+              trailing: Text(statusText(session.status), style: TextStyle(color: statusFg(session.status), fontWeight: FontWeight.bold)),
+            ),
+          const Divider(height: 24),
+          LinedTitle("Student Attendance"),
+          const SizedBox(height: 8),
+          FutureBuilder(
+            future: controller.getStudentWeeklyAttendanceForSubject(item.subjectDisplay),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingContent();
+              }
+              if (snapshot.hasError) {
+                return ErrorContent(error: "Error: ${snapshot.error}");
+              }
+              final studentList = snapshot.data?.$1 ?? [];
+              final attendanceData = snapshot.data?.$2 ?? {};
+              if (studentList.isEmpty) {
+                return const ErrorContent(error: "No students found for this subject.");
+              }
+              return CollapsibleStudentAttendanceList(
+                students: studentList,
+                attendanceData: attendanceData,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MonthlyDetailsPanel extends StatelessWidget {
+  final SubjectTotals item;
+  final ScheduleController controller;
+
+  const MonthlyDetailsPanel({
+    super.key,
+    required this.item,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final selfAttendance = controller.state.monthlyDetails
+        .where((s) => s.subject == item.subjectDisplay && s.roomType == item.roomType)
+        .toList();
+
+    final attendanceMap = <DateTime, Session>{};
+    for (final session in selfAttendance) {
+      if (session.updatedAt != null) {
+        final dateOnly = DateUtils.dateOnly(session.updatedAt!);
+        attendanceMap[dateOnly] = session;
+      }
+    }
+
+    final monthDate = controller.state.anchor;
+    final firstDayOfMonth = DateTime(monthDate.year, monthDate.month, 1);
+    final lastDayOfMonth = DateTime(monthDate.year, monthDate.month + 1, 0);
+
+    return SlidingPanel(
+      title: "${item.subjectDisplay} (${item.roomType})",
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _kv(context, Icons.pie_chart_outline, 'Total Attendance', '${item.attended}/${item.total}'),
+          const Divider(height: 24),
+          const LinedTitle("My Monthly Attendance"),
+          const SizedBox(height: 8),
+          MonthlyAttendanceGrid(
+            firstDayOfMonth: firstDayOfMonth,
+            lastDayOfMonth: lastDayOfMonth,
+            attendanceMap: attendanceMap,
+          ),
+          const Divider(height: 24),
+          const LinedTitle("Student Attendance"),
+          const SizedBox(height: 8),
+          FutureBuilder(
+            future: controller.getStudentMonthlyAttendanceForSubject(item.subjectDisplay, item.roomType),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const LoadingContent();
+              }
+              if (snapshot.hasError) {
+                return ErrorContent(error: "Error: ${snapshot.error}");
+              }
+              final studentList = snapshot.data?.$1 ?? [];
+              final attendanceData = snapshot.data?.$2 ?? {};
+              if (studentList.isEmpty) {
+                return const ErrorContent(error: "No students found for this subject.");
+              }
+              return CollapsibleStudentAttendanceList(
+                students: studentList,
+                attendanceData: attendanceData,
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class MonthlyAttendanceGrid extends StatelessWidget {
+  final DateTime firstDayOfMonth;
+  final DateTime lastDayOfMonth;
+  final Map<DateTime, Session> attendanceMap;
+
+  const MonthlyAttendanceGrid({
+    super.key,
+    required this.firstDayOfMonth,
+    required this.lastDayOfMonth,
+    required this.attendanceMap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final dayCount = lastDayOfMonth.day;
+    const dayHeaders = ['M', 'T', 'W', 'Th', 'F', 'S', 'Su'];
+
+    final firstWeekday = firstDayOfMonth.weekday;
+    final emptyCellsBefore = firstWeekday - 1;
+
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: dayHeaders.map((day) => Text(day, style: Theme.of(context).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.bold))).toList(),
+        ),
+        const SizedBox(height: 8),
+
+        GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 7,
+            childAspectRatio: 1.2,
+            crossAxisSpacing: 4,
+            mainAxisSpacing: 4,
+          ),
+          itemCount: dayCount + emptyCellsBefore,
+          itemBuilder: (context, index) {
+            if (index < emptyCellsBefore) {
+              return const SizedBox.shrink();
+            }
+
+            final dayNumber = index - emptyCellsBefore + 1;
+            final date = DateTime(firstDayOfMonth.year, firstDayOfMonth.month, dayNumber);
+            final session = attendanceMap[date];
+            final status = session?.status ?? AttendanceStatus.none;
+
+            return Container(
+              decoration: BoxDecoration(
+                color: statusBg(status),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: SingleChildScrollView(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2.0),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        '$dayNumber',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: statusFg(status),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        statusText(status),
+                        style: TextStyle(
+                          color: statusFg(status).withOpacity(0.8),
+                          fontSize: 9,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      ],
+    );
+  }
+}
+
+
+class CollapsibleStudentAttendanceList extends StatefulWidget {
+  final List<SectionStudent> students;
+  final Map<String, List<StudentAttendanceRecord>> attendanceData;
+
+  const CollapsibleStudentAttendanceList({
+    super.key,
+    required this.students,
+    required this.attendanceData,
+  });
+
+  @override
+  _CollapsibleStudentAttendanceListState createState() => _CollapsibleStudentAttendanceListState();
+}
+
+class _CollapsibleStudentAttendanceListState extends State<CollapsibleStudentAttendanceList> {
+  String? _expandedStudentId;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.students.isEmpty) {
+      return const Center(child: Text("No student records available."));
+    }
+
+    widget.students.sort((a, b) => a.name.compareTo(b.name));
+
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: widget.students.length,
+      itemBuilder: (context, index) {
+        final student = widget.students[index];
+        final records = widget.attendanceData[student.uid] ?? [];
+        final isExpanded = _expandedStudentId == student.uid;
+
+        final attendedCount = records.where((r) => r.status == AttendanceStatus.present || r.status == AttendanceStatus.late || r.status == AttendanceStatus.excused).length;
+        final totalCount = records.where((r) => r.status != AttendanceStatus.none && r.status != AttendanceStatus.scheduled).length;
+
+
+        return Card(
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          elevation: 1,
+          child: ExpansionTile(
+            key: PageStorageKey(student.uid),
+            title: Text(student.name),
+            trailing: Text('$attendedCount/$totalCount'),
+            onExpansionChanged: (expanded) {
+              setState(() {
+                _expandedStudentId = expanded ? student.uid : null;
+              });
+            },
+            initiallyExpanded: isExpanded,
+            children: records.isNotEmpty
+                ? records.map((record) {
+              return ListTile(
+                dense: true,
+                leading: Icon(Icons.event_note, color: statusFg(record.status), size: 20),
+                title: Text(DateFormat('MMM d, EEEE').format(record.firstSeen ?? record.lastSeen ?? DateTime.now())),
+                trailing: Text(statusText(record.status), style: TextStyle(color: statusFg(record.status), fontWeight: FontWeight.bold)),
+              );
+            }).toList()
+                : [
+              const ListTile(
+                dense: true,
+                title: Center(child: Text("No attendance records for this period.")),
+              )
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
 Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
   padding: const EdgeInsets.symmetric(vertical: 6),
   child: Row(children: [
@@ -1105,7 +1362,6 @@ Widget _kv(BuildContext context, IconData icon, String k, String v) => Padding(
   ]),
 );
 
-// ============================ SKELETON WIDGETS ============================
 
 class _SkeletonBox extends StatelessWidget {
   final double? width;

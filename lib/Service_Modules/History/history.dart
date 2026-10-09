@@ -17,7 +17,6 @@ class RequestHistoryModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      //backgroundColor: const Color(0xFFF2F5FA),
       insetPadding: const EdgeInsets.all(24),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
@@ -26,7 +25,6 @@ class RequestHistoryModal extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Header with X
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

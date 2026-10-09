@@ -5,13 +5,11 @@ import 'dart:async';
 
 class HomeService {
   final FirebaseFirestore _db;
-  // Add simple caching for academic IDs
   final Map<String, Map<String, String>> _academicIdsCache = {};
 
   HomeService({FirebaseFirestore? firestore})
       : _db = firestore ?? FirebaseFirestore.instance;
 
-  // ============================ USER + NOTES ============================
 
   DocumentReference<Map<String, dynamic>> _userDoc({
     required String role,
@@ -59,23 +57,18 @@ class HomeService {
     return noteRef.set({'text': 'Tap to write notes'});
   }
 
-  // --- THIS IS THE FIX ---
-  // It now points to the user's personal notifications subcollection.
   Stream<int> streamUnreadCount({
     required String role,
     required String uid,
   }) {
     final notificationsCollection = _userDoc(role: role, uid: uid)
         .collection('notifications')
-        .where('read', isEqualTo: false); // We only need to filter by 'read' status now
+        .where('read', isEqualTo: false);
 
     return notificationsCollection.snapshots().map((snapshot) => snapshot.size);
   }
 
-  // ============================ ACADEMIC PATH (IDs) ============================
-
   Future<Map<String, String>?> _findActiveAcademicIds() async {
-    // Check cache first
     const cacheKey = 'activeAcademicIds';
     if (_academicIdsCache.containsKey(cacheKey)) {
       return _academicIdsCache[cacheKey];
@@ -99,14 +92,10 @@ class HomeService {
 
     final result = {'academicYearId': activeYearId, 'semesterId': activeSemesterId};
 
-    // Store in cache
     _academicIdsCache[cacheKey] = result;
     return result;
   }
 
-  // ============================ SCHEDULES ============================
-
-  // NEW IMPROVED IMPLEMENTATION using collection group queries
   Stream<List<ScheduleItem>> streamSchedulesForStudent({
     required String role,
     required String uid,
@@ -120,7 +109,6 @@ class HomeService {
     final todayKey = _todayDay();
 
     try {
-      // 1. First, get the user's document to retrieve their ID field
       final userDoc = await _userDoc(role: role, uid: uid).get();
       if (!userDoc.exists || userDoc.data() == null) {
         yield [];
@@ -131,61 +119,45 @@ class HomeService {
       final studentIdField = _strOrNull(userData['userId']) ?? _strOrNull(userData['id']);
 
       if (studentIdField == null) {
-        // No ID field found in user document, can't proceed
         yield [];
         return;
       }
 
-      // For UI purposes, we still need section name
       final sectionName = _strOrNull(userData['sectionName']);
 
-      // 2. Create a controller to manage the stream
       final controller = StreamController<List<ScheduleItem>>();
 
-      // 3. Create path patterns for filtering
       final termPathPattern = 'academic_years/${activeIds['academicYearId']}/semesters/${activeIds['semesterId']}';
 
-      // 4. Set up the collection group query for enrolled_students
-      // This query finds all documents in any enrolled_students collection
-      // where the studentId field matches the student's ID field
       final enrollmentsQuery = _db.collectionGroup('enrolled_students')
           .where('studentId', isEqualTo: studentIdField);
 
-      // 5. Set up the subscription to listen for changes
       final subscription = enrollmentsQuery.snapshots().listen((snapshot) async {
         final scheduleItems = <ScheduleItem>[];
         final processedScheduleIds = <String>{};
 
-        // Filter to only include documents in the active term and that are for today
         for (final doc in snapshot.docs) {
           final path = doc.reference.path;
 
-          // Check if this enrollment is in the current term
           if (!path.contains(termPathPattern)) continue;
 
-          // Get the parent schedule reference
           final scheduleRef = doc.reference.parent.parent;
           if (scheduleRef == null) continue;
 
-          // Check if we've already processed this schedule
           if (processedScheduleIds.contains(scheduleRef.id)) continue;
           processedScheduleIds.add(scheduleRef.id);
 
-          // Get the schedule document
           final scheduleDoc = await scheduleRef.get();
           if (!scheduleDoc.exists) continue;
 
-          // Check if this schedule is for today
           final scheduleData = scheduleDoc.data();
           if (scheduleData == null) continue;
 
           final days = scheduleData['days'] as List<dynamic>?;
           if (days == null || !days.contains(todayKey)) continue;
 
-          // Get section name from path if needed
           String? currentSectionName = sectionName;
           if (currentSectionName == null) {
-            // Try to extract section name from path or parent document
             final sectionRef = scheduleRef.parent.parent;
             if (sectionRef != null) {
               final sectionDoc = await sectionRef.get();
@@ -193,7 +165,6 @@ class HomeService {
             }
           }
 
-          // Map to schedule item
           final scheduleItem = _mapSingleDocToScheduleItem(
               scheduleDoc,
               sectionName: currentSectionName
@@ -202,23 +173,19 @@ class HomeService {
           scheduleItems.add(scheduleItem);
         }
 
-        // Sort items by start time
         scheduleItems.sort((a, b) =>
             _parseTimeToMinutes(a.startTime).compareTo(_parseTimeToMinutes(b.startTime))
         );
 
-        // Emit the updated list
         controller.add(scheduleItems);
       }, onError: (e) {
         controller.add([]);
       });
 
-      // 6. Handle cleanup when stream is closed
       controller.onCancel = () {
         subscription.cancel();
       };
 
-      // 7. Yield from controller stream
       yield* controller.stream;
 
     } catch (e) {
@@ -226,7 +193,6 @@ class HomeService {
     }
   }
 
-  // Keep original implementation as a fallback
   Stream<List<ScheduleItem>> streamSchedulesForStudentOriginal({
     required String role,
     required String uid,
@@ -240,7 +206,6 @@ class HomeService {
     final todayKey = _todayDay();
 
     try {
-      // 1. First, get the user's section from their profile
       final userDoc = await _userDoc(role: role, uid: uid).get();
       final userData = userDoc.data();
 
@@ -255,7 +220,6 @@ class HomeService {
         return;
       }
 
-      // 2. Get the departments in the active academic year/semester
       final departmentsQuery = _db.collection('academic_years')
           .doc(activeIds['academicYearId'])
           .collection('semesters')
@@ -269,12 +233,10 @@ class HomeService {
         return;
       }
 
-      // 3. Set up stream management
       final controller = StreamController<List<ScheduleItem>>();
       final subscriptions = <StreamSubscription>[];
       final allSchedules = <ScheduleItem>[];
 
-      // 4. Search for the section across all departments/courses/year_levels
       for (final deptDoc in departmentsSnap.docs) {
         final coursesQuery = deptDoc.reference.collection('courses');
         final coursesSnap = await coursesQuery.get();
@@ -292,14 +254,11 @@ class HomeService {
             for (final sectionDoc in sectionsSnap.docs) {
               final sectionRef = sectionDoc.reference;
 
-              // For each section, get all its schedules for today
               final schedulesQuery = sectionRef.collection('schedules')
                   .where('days', arrayContains: todayKey);
 
               final schedulesSnap = await schedulesQuery.get();
-              // Check each schedule for enrollment
               for (final scheduleDoc in schedulesSnap.docs) {
-                // IMPORTANT: Check if the student is enrolled in this specific schedule
                 final enrolledStudentsQuery = scheduleDoc.reference.collection('enrolled_students')
                     .where('studentId', isEqualTo: uid)
                     .limit(1);
@@ -307,13 +266,11 @@ class HomeService {
                 final enrollmentSnap = await enrolledStudentsQuery.get();
 
                 if (enrollmentSnap.docs.isNotEmpty) {
-                  // Add this schedule to our list
                   final scheduleItem = _mapSingleDocToScheduleItem(
                       scheduleDoc,
                       sectionName: sectionName
                   );
 
-                  // Check for duplicates before adding
                   if (!allSchedules.any((item) =>
                   item.subjectName == scheduleItem.subjectName &&
                       item.startTime == scheduleItem.startTime)) {
@@ -322,14 +279,11 @@ class HomeService {
                 }
               }
 
-              // Setup a stream to listen for changes to this section's schedules
               final subscription = schedulesQuery.snapshots().listen(
                       (snapshot) async {
-                    // Process any changes to schedules
                     final updatedSchedules = <ScheduleItem>[];
 
                     for (final scheduleDoc in snapshot.docs) {
-                      // Check if the student is enrolled
                       final enrollmentQuery = scheduleDoc.reference.collection('enrolled_students')
                           .where('studentId', isEqualTo: uid)
                           .limit(1);
@@ -344,15 +298,12 @@ class HomeService {
                       }
                     }
 
-                    // Update the master list
                     for (final schedule in updatedSchedules) {
                       allSchedules.removeWhere((item) =>
                       item.subjectName == schedule.subjectName &&
                           item.startTime == schedule.startTime);
                       allSchedules.add(schedule);
                     }
-
-                    // Sort and emit
                     allSchedules.sort((a, b) =>
                         _parseTimeToMinutes(a.startTime).compareTo(_parseTimeToMinutes(b.startTime)));
                     controller.add([...allSchedules]);
@@ -367,7 +318,6 @@ class HomeService {
         }
       }
 
-      // 5. If we found and added any schedules, emit them now
       if (allSchedules.isNotEmpty) {
         allSchedules.sort((a, b) =>
             _parseTimeToMinutes(a.startTime).compareTo(_parseTimeToMinutes(b.startTime)));
@@ -376,14 +326,12 @@ class HomeService {
         controller.add([]);
       }
 
-      // 6. Handle cleanup when stream is closed
       controller.onCancel = () {
         for (final sub in subscriptions) {
           sub.cancel();
         }
       };
 
-      // 7. Yield from controller stream
       yield* controller.stream;
 
     } catch (e) {
@@ -403,7 +351,6 @@ class HomeService {
     final todayKey = _todayDay();
 
     try {
-      // Get all departments in the active academic year/semester
       final departmentsQuery = _db.collection('academic_years')
           .doc(activeIds['academicYearId'])
           .collection('semesters')
@@ -416,13 +363,10 @@ class HomeService {
         yield [];
         return;
       }
-
-      // Create a controller to manage multiple streams
       final controller = StreamController<List<ScheduleItem>>();
       final subscriptions = <StreamSubscription>[];
       final allTeacherSchedules = <ScheduleItem>[];
 
-      // Search for schedules across all departments/courses/year_levels/sections
       for (final deptDoc in departmentsSnap.docs) {
         final coursesQuery = deptDoc.reference.collection('courses');
         final coursesSnap = await coursesQuery.get();
@@ -447,7 +391,6 @@ class HomeService {
                       return _mapSingleDocToScheduleItem(doc, sectionName: sectionName);
                     }).toList();
 
-                    // Update the combined list
                     allTeacherSchedules.removeWhere((item) =>
                         scheduleItems.any((newItem) =>
                         newItem.subjectName == item.subjectName &&
@@ -456,11 +399,9 @@ class HomeService {
                     );
                     allTeacherSchedules.addAll(scheduleItems);
 
-                    // Sort by start time
                     allTeacherSchedules.sort((a, b) =>
                         _parseTimeToMinutes(a.startTime).compareTo(_parseTimeToMinutes(b.startTime)));
 
-                    // Emit the updated list
                     controller.add([...allTeacherSchedules]);
                   },
                   onError: (e) {
@@ -473,27 +414,23 @@ class HomeService {
         }
       }
 
-      // Handle cleanup
       controller.onCancel = () {
         for (final sub in subscriptions) {
           sub.cancel();
         }
       };
 
-      // If no subscriptions were added, yield empty list immediately
       if (subscriptions.isEmpty) {
         yield [];
         return;
       }
 
-      // Yield from controller stream
       yield* controller.stream;
     } catch (e) {
       yield [];
     }
   }
 
-  // ===================== Chip-tap Details Fetching =====================
 
   Future<InstructorDetails?> fetchInstructorDetails(String instructorId) async {
     try {
@@ -511,7 +448,6 @@ class HomeService {
     }
   }
 
-  // IMPROVED: Use collection group query for fetching students
   Future<List<SectionStudent>> fetchStudentsForSection(String sectionName) async {
     try {
       final activeIds = await _findActiveAcademicIds();
@@ -521,22 +457,18 @@ class HomeService {
 
       final termPathPattern = 'academic_years/${activeIds['academicYearId']}/semesters/${activeIds['semesterId']}';
 
-      // Will store unique student IDs from enrolled_students
       final studentIds = <String>{};
 
-      // Use collection group to find sections with matching name
       final sectionQuery = _db.collectionGroup('sections')
           .where('sectionName', isEqualTo: sectionName);
 
       final sectionSnap = await sectionQuery.get();
 
-      // Filter to sections in the active term
       final validSections = sectionSnap.docs.where((doc) {
         final path = doc.reference.path;
         return path.contains(termPathPattern);
       }).toList();
 
-      // For each valid section, get schedules and enrolled students
       for (final sectionDoc in validSections) {
         final schedulesQuery = sectionDoc.reference.collection('schedules');
         final schedulesSnap = await schedulesQuery.get();
@@ -545,7 +477,6 @@ class HomeService {
           final enrolledStudentsQuery = scheduleDoc.reference.collection('enrolled_students');
           final enrolledStudentsSnap = await enrolledStudentsQuery.get();
 
-          // Only consider valid enrollments where studentId matches document ID
           for (final studentDoc in enrolledStudentsSnap.docs) {
             final studentId = studentDoc.data()['studentId']?.toString();
             if (studentId != null && studentId.isNotEmpty) {
@@ -559,10 +490,7 @@ class HomeService {
         return [];
       }
 
-      // Now fetch student details from users collection
       final students = <SectionStudent>[];
-
-      // Process in batches to avoid large IN queries
       const batchSize = 10;
       for (var i = 0; i < studentIds.length; i += batchSize) {
         final endIndex = (i + batchSize < studentIds.length) ? i + batchSize : studentIds.length;
@@ -598,14 +526,12 @@ class HomeService {
       final dayKey = DateFormat('EEEE').format(forDate).toLowerCase();
       final termPathPattern = 'academic_years/${activeIds['academicYearId']}/semesters/${activeIds['semesterId']}';
 
-      // Use collection group query to find all schedules for this room
       final scheduleQuery = _db.collectionGroup('schedules')
           .where('roomName', isEqualTo: roomName)
           .where('days', arrayContains: dayKey);
 
       final scheduleSnap = await scheduleQuery.get();
 
-      // Filter to schedules in active term
       final validSchedules = scheduleSnap.docs.where((doc) {
         final path = doc.reference.path;
         return path.contains(termPathPattern);
@@ -613,9 +539,7 @@ class HomeService {
 
       final allSchedules = <ScheduleItem>[];
 
-      // Process each valid schedule
       for (final scheduleDoc in validSchedules) {
-        // Get section name from parent
         final sectionRef = scheduleDoc.reference.parent.parent;
         String? sectionName;
 
@@ -627,15 +551,12 @@ class HomeService {
         allSchedules.add(_mapSingleDocToScheduleItem(scheduleDoc, sectionName: sectionName));
       }
 
-      // Sort schedules by start time
       allSchedules.sort((a, b) => _parseTimeToMinutes(a.startTime).compareTo(_parseTimeToMinutes(b.startTime)));
       return allSchedules;
     } catch (e) {
       return [];
     }
   }
-
-  // ============================ HELPERS ============================
 
   List<ScheduleItem> _mapSnapToScheduleItems(
       List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {String? sectionName}) {

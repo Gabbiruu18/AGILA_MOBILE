@@ -2,9 +2,8 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:intl/intl.dart';
-import 'package:project_agila/Service_Modules/Notification/notification_service.dart'; // Import the notification service
+import 'package:project_agila/Service_Modules/Notification/notification_service.dart';
 
-// ============================ DATA MODELS (UPDATED) ============================
 
 enum AttendanceStatus { scheduled, present, late, absent, excused, none }
 class Session {
@@ -21,12 +20,12 @@ class Session {
   final String? instructorName;
   final AttendanceStatus status;
 
-  // New fields for detailed attendance data
+
   final DateTime? firstSeen;
   final DateTime? lastSeen;
-  final String? source; // "Manual" or "CCTV"
+  final String? source;
   final String? academicStatus;
-  final String? studentId; // UID of the user
+  final String? studentId;
   final DateTime? updatedAt;
   final String? studentNo;
 
@@ -52,7 +51,34 @@ class Session {
     this.studentNo,
   });
 
-  Session withStatus(AttendanceStatus newStatus) {
+  Session copyWith({
+    AttendanceStatus? status,
+    DateTime? updatedAt,
+  }) {
+    return Session(
+      id: id,
+      subject: subject,
+      section: section,
+      room: room,
+      roomType: roomType,
+      weekday: weekday,
+      startMinutes: startMinutes,
+      endMinutes: endMinutes,
+      colorHex: colorHex,
+      instructorId: instructorId,
+      instructorName: instructorName,
+      status: status ?? this.status,
+      firstSeen: firstSeen,
+      lastSeen: lastSeen,
+      source: source,
+      academicStatus: academicStatus,
+      studentId: studentId,
+      updatedAt: updatedAt ?? this.updatedAt,
+      studentNo: studentNo,
+    );
+  }
+
+  Session withStatus(AttendanceStatus newStatus, {DateTime? date}) {
     return Session(
       id: id,
       subject: subject,
@@ -71,7 +97,7 @@ class Session {
       source: source,
       academicStatus: academicStatus,
       studentId: studentId,
-      updatedAt: updatedAt,
+      updatedAt: date ?? updatedAt,
       studentNo: studentNo,
     );
   }
@@ -103,13 +129,13 @@ class SectionStudent {
   final String uid;
   final String name;
   final String? photoURL;
-  final String? studentNumber; // Add this property
+  final String? studentNumber;
 
   SectionStudent({
     required this.uid,
     required this.name,
     this.photoURL,
-    this.studentNumber, // Add this parameter
+    this.studentNumber,
   });
 }
 
@@ -117,7 +143,7 @@ class InstructorDetails {
   final String name;
   final String? departmentName;
   final String? photoURL;
-  final String? employeeNumber; // Add this field
+  final String? employeeNumber;
 
   InstructorDetails({required this.name, this.departmentName, this.photoURL, this.employeeNumber});
 }
@@ -173,7 +199,6 @@ class AttendanceStatusCounts {
   }
 }
 
-// ============================ SERVICE INTERFACE ============================
 
 abstract class ScheduleService {
   Future<(Map<DateTime, List<Session>>, ActiveTerm?)> getSessionsForRange({
@@ -197,7 +222,6 @@ abstract class ScheduleService {
     required DateTime forDate
   });
 
-  // New method to get sessions by status
   Future<List<Session>> getSessionsByStatus({
     required String userId,
     required String role,
@@ -206,12 +230,10 @@ abstract class ScheduleService {
   });
 }
 
-// ============================ FIRESTORE IMPLEMENTATION (UPDATED) ============================
 
 class FirestoreScheduleService implements ScheduleService {
   final FirebaseFirestore _db;
-  // Add simple caching to improve performance
-  final NotificationService _notificationService = NotificationService(); // Instantiate the service
+  final NotificationService _notificationService = NotificationService();
   final Map<String, ActiveTerm> _termCache = {};
 
   FirestoreScheduleService({FirebaseFirestore? firestore}) : _db = firestore ?? FirebaseFirestore.instance;
@@ -237,31 +259,27 @@ class FirestoreScheduleService implements ScheduleService {
       allSessions = await _fetchStudentSchedules(uid: userId, role: role, activeTerm: activeTerm);
     }
 
-    // Enrich sessions with attendance data
-    allSessions = await _enrichSessionsWithAttendanceData(allSessions, userId, role, start, end);
+    final enrichedSessionsWithDates = await _enrichSessionsWithAttendanceData(allSessions, userId, role, start, end);
 
     final results = <DateTime, List<Session>>{};
-    final sessionsByWeekday = <int, List<Session>>{};
-    for (final session in allSessions) {
-      sessionsByWeekday.putIfAbsent(session.weekday, () => []).add(session);
-    }
-
     for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
-      final sessionsForDay = sessionsByWeekday[d.weekday] ?? [];
-      sessionsForDay.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
-      results[d] = sessionsForDay;
+      final dateOnly = DateTime(d.year, d.month, d.day);
+      final sessionsForDay = enrichedSessionsWithDates
+          .where((s) => s.updatedAt != null && DateTime(s.updatedAt!.year, s.updatedAt!.month, s.updatedAt!.day) == dateOnly)
+          .toList();
 
-      // --- NEW: Schedule notifications for today ---
+      sessionsForDay.sort((a, b) => a.startMinutes.compareTo(b.startMinutes));
+      results[dateOnly] = sessionsForDay;
+
+
       final today = DateTime.now();
       if (d.year == today.year && d.month == today.month && d.day == today.day) {
         _scheduleIncomingClassNotifications(sessionsForDay);
       }
-      // --- End new code ---
     }
     return (results, activeTerm);
   }
 
-  // --- NEW METHOD TO SCHEDULE NOTIFICATIONS ---
   Future<void> _scheduleIncomingClassNotifications(List<Session> sessions) async {
     final now = DateTime.now();
 
@@ -269,13 +287,11 @@ class FirestoreScheduleService implements ScheduleService {
       final startTimeMinutes = session.startMinutes;
       final classDateTime = DateTime(now.year, now.month, now.day, startTimeMinutes ~/ 60, startTimeMinutes % 60);
 
-      // Schedule notification 15 minutes before the class starts
       final notificationTime = classDateTime.subtract(const Duration(minutes: 15));
 
-      // Only schedule if the notification time is in the future
       if (notificationTime.isAfter(now)) {
         await _notificationService.scheduleNotification(
-          id: session.id.hashCode, // Use a unique ID for each notification
+          id: session.id.hashCode,
           title: 'Upcoming Class',
           body: 'Your class "${session.subject}" starts in 15 minutes.',
           scheduledTime: notificationTime,
@@ -323,308 +339,107 @@ class FirestoreScheduleService implements ScheduleService {
       String userId,
       String role,
       DateTime start,
-      DateTime end
+      DateTime end,
       ) async {
-    try {
-      // Format dates for query
-      final List<String> dateStrings = [];
-      for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
-        dateStrings.add(_formatDateStr(d));
-      }
+    final enrichedSessions = <Session>[];
+    final scheduleIds = sessions.map((s) => s.id).toSet();
 
-      final enrolledScheduleIds = sessions.map((s) => s.id).toSet();
-      final attendanceBySubjectId = <String, List<DocumentSnapshot<Map<String, dynamic>>>>{};
-      int totalAttendanceRecords = 0;
-      final now = DateTime.now(); // Get current time for absence check
-
-      for (final dateStr in dateStrings) {
-        try {
-
-          final snapshot = await _db
-              .collection('attendance_sessions')
-              .where('dateStr', isEqualTo: dateStr)
-              .get();
-
-          totalAttendanceRecords += snapshot.docs.length;
-
-          // Check each session for this user's attendance
-          for (final doc in snapshot.docs) {
-            final data = doc.data();
-            final scheduleId = _strOrNull(data['scheduleId']);
-
-            try {
-              // Store the attendance session document regardless of whether the user has a record
-              // We'll use this to mark absences for any session that has ended
-              if (scheduleId != null && enrolledScheduleIds.contains(scheduleId)) {
-                attendanceBySubjectId.putIfAbsent(scheduleId, () => []).add(doc);
-              }
-
-              if (role == 'teacher' || role == 'program_head') {
-                // For instructors, check the instructor/main collection
-                final mainCollectionRef = doc.reference.collection('instructor').doc('main');
-                final mainDoc = await mainCollectionRef.get();
-
-                if (mainDoc.exists && mainDoc.data() != null) {
-                  final mainData = mainDoc.data()!;
-                  final instructorId = _strOrNull(mainData['instructorId']);
-
-                  // Check if this instructor document is for the current user
-                  if (instructorId == userId) {
-                  }
-                } else {
-                }
-              } else {
-                // For students, check the students collection
-                final studentRef = doc.reference.collection('students').doc(userId);
-                final studentAttendanceDoc = await studentRef.get();
-
-                if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
-
-                  final studentData = studentAttendanceDoc.data()!;
-                } else {
-                }
-              }
-            } catch (e) {
-              debugPrint('[USER CHECK] Error checking attendance: $e');
-            }
-          }
-        } catch (e) {
-          debugPrint('[ATTENDANCE DEBUG] Error fetching attendance for date $dateStr: $e');
-        }
-      }
-      // Process each session and find matching attendance data
-      final enrichedSessions = <Session>[];
-      int matchesFound = 0;
-
-      for (final session in sessions) {
-        var enrichedSession = session;
-        final matchingAttendanceDocs = attendanceBySubjectId[session.id] ?? [];
-        bool foundAttendanceRecord = false;
-
-        for (final doc in matchingAttendanceDocs) {
-          try {
-            if (role == 'teacher' || role == 'program_head') {
-              // Get the instructor's attendance record
-              final mainRef = doc.reference.collection('instructor').doc('main');
-
-              final mainDoc = await mainRef.get();
-
-              if (mainDoc.exists && mainDoc.data() != null) {
-                final mainData = mainDoc.data()!;
-
-                // Check if this instructor document is for the current user
-                if (mainData['instructorId'] == userId) {
-                  foundAttendanceRecord = true;
-
-                  final status = _parseAttendanceStatus(mainData['status']);
-                  enrichedSession = Session(
-                    id: session.id,
-                    subject: session.subject,
-                    section: session.section,
-                    room: session.room,
-                    roomType: session.roomType,
-                    weekday: session.weekday,
-                    startMinutes: session.startMinutes,
-                    endMinutes: session.endMinutes,
-                    colorHex: session.colorHex,
-                    instructorId: session.instructorId,
-                    instructorName: session.instructorName,
-                    status: status,
-                    firstSeen: _parseDate(mainData['firstSeen']),
-                    lastSeen: _parseDate(mainData['lastSeen']),
-                    source: _strOrNull(mainData['source']),
-                    updatedAt: _parseDate(mainData['updatedAt']),
-                  );
-
-                  matchesFound++;
-                  break;
-                }
-              }
-            } else {
-              // Get the student's attendance record
-              final studentRef = doc.reference.collection('students').doc(userId);
-
-              final studentAttendanceDoc = await studentRef.get();
-
-              if (studentAttendanceDoc.exists && studentAttendanceDoc.data() != null) {
-                final attendanceData = studentAttendanceDoc.data()!;
-                foundAttendanceRecord = true;
-
-                final statusValue = attendanceData['status'];
-
-                // Update the session with attendance data
-                final status = _parseAttendanceStatus(statusValue);
-                enrichedSession = Session(
-                  id: session.id,
-                  subject: session.subject,
-                  section: session.section,
-                  room: session.room,
-                  roomType: session.roomType,
-                  weekday: session.weekday,
-                  startMinutes: session.startMinutes,
-                  endMinutes: session.endMinutes,
-                  colorHex: session.colorHex,
-                  instructorId: session.instructorId,
-                  instructorName: session.instructorName,
-                  status: status,
-                  firstSeen: _parseDate(attendanceData['firstSeen']),
-                  lastSeen: _parseDate(attendanceData['lastSeen']),
-                  source: _strOrNull(attendanceData['source']),
-                  academicStatus: _strOrNull(attendanceData['academicStatus']),
-                  studentId: userId,
-                  updatedAt: _parseDate(attendanceData['updatedAt']),
-                  studentNo: _strOrNull(attendanceData['studentNo']),
-                );
-
-                matchesFound++;
-                break;
-              }
-            }
-          } catch (e) {
-            debugPrint('[ATTENDANCE DEBUG] Error processing attendance for session ${session.id}: $e');
-          }
-        }
-
-        // NEW: Check if session is past but no attendance session was created
-        if (!foundAttendanceRecord && matchingAttendanceDocs.isEmpty) {
-          try {
-            // Find the date of the session in the queried range
-            DateTime? sessionDate;
-            for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
-              if (d.weekday == session.weekday) {
-                sessionDate = d;
-                break;
-              }
-            }
-
-            if (sessionDate != null) {
-              // Calculate session end time
-              final endTimeMinutes = session.endMinutes;
-              final endHour = endTimeMinutes ~/ 60;
-              final endMinute = endTimeMinutes % 60;
-
-              final sessionEndTime = DateTime(
-                  sessionDate.year,
-                  sessionDate.month,
-                  sessionDate.day,
-                  endHour,
-                  endMinute
-              );
-
-
-              // If session end time has passed and no attendance session was created
-              if (now.isAfter(sessionEndTime)) {
-                // Update the session status to show it's done but had no attendance tracking
-                enrichedSession = Session(
-                  id: session.id,
-                  subject: session.subject,
-                  section: session.section,
-                  room: session.room,
-                  roomType: session.roomType,
-                  weekday: session.weekday,
-                  startMinutes: session.startMinutes,
-                  endMinutes: session.endMinutes,
-                  colorHex: session.colorHex,
-                  instructorId: session.instructorId,
-                  instructorName: session.instructorName,
-                  status: AttendanceStatus.none,
-                  source: "No attendance session created",
-                  updatedAt: now,
-                  studentId: userId,
-                );
-
-                matchesFound++;
-              }
-            }
-          } catch (e) {
-            debugPrint('[ATTENDANCE DEBUG] Error checking for past session with no attendance: $e');
-          }
-        }
-
-
-        // Check if we need to mark the user as absent
-        if (!foundAttendanceRecord && matchingAttendanceDocs.isNotEmpty) {
-          // Get the actual date of the attendance session from the document
-          final attendanceDoc = matchingAttendanceDocs.first;
-          final dateStr = _strOrNull(attendanceDoc.data()?['dateStr']);
-
-          if (dateStr != null) {
-            try {
-              // Parse the date from the attendance session
-              final sessionDate = DateTime.parse(dateStr);
-
-              // Calculate the session end time using the date from the attendance document
-              // and the end time from the schedule
-              final endTimeMinutes = session.endMinutes;
-              final endHour = endTimeMinutes ~/ 60;
-              final endMinute = endTimeMinutes % 60;
-
-              final sessionEndTime = DateTime(
-                  sessionDate.year,
-                  sessionDate.month,
-                  sessionDate.day,
-                  endHour,
-                  endMinute
-              );
-
-
-              // If session end time has passed and no attendance record found
-              if (now.isAfter(sessionEndTime)) {
-                // Get the attendance session document ID
-                final attendanceSessionId = attendanceDoc.id;
-
-                if (role == 'teacher' || role == 'program_head') {
-                  // For teachers, use the markTeacherAbsent method
-                  await markTeacherAbsent(
-                    attendanceSessionId: attendanceSessionId,
-                    teacherId: userId,
-                    teacherName: session.instructorName ?? 'Instructor',
-                  );
-                } else {
-                  // For students, use the markStudentAbsent method
-                  await markStudentAbsent(
-                    attendanceSessionId: attendanceSessionId,
-                    studentUid: userId,
-                  );
-                }
-
-                // Update the session with absent status
-                enrichedSession = Session(
-                  id: session.id,
-                  subject: session.subject,
-                  section: session.section,
-                  room: session.room,
-                  roomType: session.roomType,
-                  weekday: session.weekday,
-                  startMinutes: session.startMinutes,
-                  endMinutes: session.endMinutes,
-                  colorHex: session.colorHex,
-                  instructorId: session.instructorId,
-                  instructorName: session.instructorName,
-                  status: AttendanceStatus.absent,
-                  source: "System",
-                  updatedAt: now,
-                  studentId: role == 'teacher' || role == 'program_head' ? null : userId,
-                );
-
-                matchesFound++;
-              } else {
-                debugPrint('[ATTENDANCE DEBUG] Session has not ended yet. Not marking absent.');
-              }
-            } catch (e) {
-              debugPrint('[ATTENDANCE DEBUG] Error processing date for absence check: $e');
-            }
-          }
-        }
-
-        enrichedSessions.add(enrichedSession);
-      }
-      return enrichedSessions;
-    } catch (e) {
-      debugPrint('[ATTENDANCE DEBUG] Error enriching sessions with attendance data: $e');
-      return sessions;
+    if (scheduleIds.isEmpty) {
+      return [];
     }
+    final dateStrings = <String>{};
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      dateStrings.add(_formatDateStr(d));
+    }
+
+    final allAttendanceDocs = <DocumentSnapshot>[];
+    final scheduleIdChunks = _chunk(scheduleIds.toList(), 30);
+
+    for (final idChunk in scheduleIdChunks) {
+      if (idChunk.isEmpty) continue;
+      final attendanceSessionsSnap = await _db
+          .collection('attendance_sessions')
+          .where('scheduleId', whereIn: idChunk)
+          .get();
+
+      for (final doc in attendanceSessionsSnap.docs) {
+        final data = doc.data();
+        final dateStr = data['dateStr'] as String?;
+        if (dateStr != null && dateStrings.contains(dateStr)) {
+          allAttendanceDocs.add(doc);
+        }
+      }
+    }
+
+    final attendanceByScheduleIdAndDate = <String, DocumentSnapshot>{};
+    for (final doc in allAttendanceDocs) {
+      final data = doc.data() as Map<String, dynamic>;
+      final scheduleId = data['scheduleId'] as String?;
+      final dateStr = data['dateStr'] as String?;
+      if (scheduleId != null && dateStr != null) {
+        attendanceByScheduleIdAndDate['$scheduleId-$dateStr'] = doc;
+      }
+    }
+
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      final dateStr = _formatDateStr(d);
+      final sessionsForDay = sessions.where((s) => s.weekday == d.weekday).toList();
+
+      for (final session in sessionsForDay) {
+        final attendanceSessionDoc = attendanceByScheduleIdAndDate['${session.id}-$dateStr'];
+
+        if (attendanceSessionDoc != null) {
+          DocumentSnapshot? userAttendanceDoc;
+          if (role == 'teacher' || role == 'program_head') {
+            userAttendanceDoc = await attendanceSessionDoc.reference.collection('instructor').doc('main').get();
+          } else {
+            userAttendanceDoc = await attendanceSessionDoc.reference.collection('students').doc(userId).get();
+          }
+
+          if (userAttendanceDoc.exists && userAttendanceDoc.data() != null) {
+            final data = userAttendanceDoc.data() as Map<String, dynamic>;
+            enrichedSessions.add(Session(
+              id: session.id,
+              subject: session.subject,
+              section: session.section,
+              room: session.room,
+              roomType: session.roomType,
+              weekday: d.weekday,
+              startMinutes: session.startMinutes,
+              endMinutes: session.endMinutes,
+              colorHex: session.colorHex,
+              instructorId: session.instructorId,
+              instructorName: session.instructorName,
+              status: _parseAttendanceStatus(data['status']),
+              firstSeen: _parseDate(data['firstSeen']),
+              lastSeen: _parseDate(data['lastSeen']),
+              source: _strOrNull(data['source']),
+              academicStatus: _strOrNull(data['academicStatus']),
+              studentId: userId,
+              updatedAt: _parseDate(data['updatedAt']) ?? d,
+              studentNo: _strOrNull(data['studentNo']),
+            ));
+          } else {
+            final endTime = DateTime(d.year, d.month, d.day, session.endMinutes ~/ 60, session.endMinutes % 60);
+            if (DateTime.now().isAfter(endTime)) {
+              enrichedSessions.add(session.withStatus(AttendanceStatus.absent, date: d));
+            } else {
+              enrichedSessions.add(session.withStatus(AttendanceStatus.scheduled, date: d));
+            }
+          }
+        } else {
+          final endTime = DateTime(d.year, d.month, d.day, session.endMinutes ~/ 60, session.endMinutes % 60);
+          if (DateTime.now().isAfter(endTime)) {
+            enrichedSessions.add(session.copyWith(status: AttendanceStatus.none, updatedAt: d));
+          } else {
+            enrichedSessions.add(session.copyWith(status: AttendanceStatus.scheduled, updatedAt: d));
+          }
+        }
+      }
+    }
+    return enrichedSessions;
   }
+
 
   Future<Map<String, dynamic>> fetchSessionAcademicDetails({
     required String scheduleId,
@@ -644,7 +459,6 @@ class FirestoreScheduleService implements ScheduleService {
         return result;
       }
 
-      // Fetch academic year details directly
       final yearDoc = await _db.collection('academic_years').doc(activeTerm.academicYearId).get();
       if (yearDoc.exists && yearDoc.data() != null) {
         final yearData = yearDoc.data()!;
@@ -652,7 +466,6 @@ class FirestoreScheduleService implements ScheduleService {
         debugPrint('[PDF] Academic year: ${result['acadYear']}');
       }
 
-      // Fetch semester details
       final semDoc = await _db.collection('academic_years')
           .doc(activeTerm.academicYearId)
           .collection('semesters')
@@ -664,7 +477,6 @@ class FirestoreScheduleService implements ScheduleService {
         debugPrint('[PDF] Semester name: ${result['semesterName']}');
       }
 
-      // Search for the schedule document to find its path
       final departmentsSnap = await semDoc.reference.collection('departments').get();
       for (final deptDoc in departmentsSnap.docs) {
         final coursesSnap = await deptDoc.reference.collection('courses').get();
@@ -675,11 +487,10 @@ class FirestoreScheduleService implements ScheduleService {
             for (final sectionDoc in sectionsSnap.docs) {
               final scheduleDoc = await sectionDoc.reference.collection('schedules').doc(scheduleId).get();
               if (scheduleDoc.exists) {
-                // Found it! Now fill in the details.
                 result['courseName'] = _strOrNull(courseDoc.data()['courseName']) ?? '';
                 result['yearLevelName'] = _strOrNull(yearLevelDoc.data()['yearLevelName']) ?? '';
                 result['sectionName'] = _strOrNull(sectionDoc.data()['sectionName'] ?? sectionDoc.data()['name']) ?? '';
-                return result; // Exit once found
+                return result;
               }
             }
           }
@@ -692,15 +503,12 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // Add this method to your FirestoreScheduleService class
   Future<List<StudentAttendanceRecord>> fetchStudentAttendanceForSession({
     required String scheduleId,
     String? dateStr
   }) async {
     try {
-      // Use provided date or default to current date
       final actualDateStr = dateStr ?? _formatDateStr(DateTime.now());
-      // First, find the attendance session document for this schedule on this date
       final attendanceSessionsQuery = await _db
           .collection('attendance_sessions')
           .where('dateStr', isEqualTo: actualDateStr)
@@ -714,7 +522,6 @@ class FirestoreScheduleService implements ScheduleService {
 
       final attendanceSessionDoc = attendanceSessionsQuery.docs.first;
 
-      // Get all students attendance records from this session
       final studentsSnap = await attendanceSessionDoc.reference
           .collection('students')
           .get();
@@ -722,7 +529,6 @@ class FirestoreScheduleService implements ScheduleService {
 
       final attendanceRecords = <StudentAttendanceRecord>[];
 
-      // Process each attendance record
       for (final doc in studentsSnap.docs) {
         try {
           final data = doc.data();
@@ -739,14 +545,13 @@ class FirestoreScheduleService implements ScheduleService {
             firstSeen: _parseDate(data['firstSeen']),
             lastSeen: _parseDate(data['lastSeen']),
             source: _strOrNull(data['source']),
-            photoURL: null, // We'll add photo URLs in a moment
+            photoURL: null,
           ));
         } catch (e) {
           debugPrint('[ATTENDANCE] Error processing student attendance record: $e');
         }
       }
 
-      // Enhance records with photo URLs if available
       for (int i = 0; i < attendanceRecords.length; i++) {
         final record = attendanceRecords[i];
         try {
@@ -760,7 +565,6 @@ class FirestoreScheduleService implements ScheduleService {
           if (studentDoc.exists && studentDoc.data() != null) {
             final photoURL = _strOrNull(studentDoc.data()!['photoURL']);
             if (photoURL != null) {
-              // Create a new record with the photo URL
               attendanceRecords[i] = StudentAttendanceRecord(
                 uid: record.uid,
                 name: record.name,
@@ -774,12 +578,10 @@ class FirestoreScheduleService implements ScheduleService {
             }
           }
         } catch (e) {
-          // Ignore errors fetching photo URL
           debugPrint('[ATTENDANCE] Error fetching photo URL: $e');
         }
       }
 
-      // Sort by name
       attendanceRecords.sort((a, b) => a.name.compareTo(b.name));
       return attendanceRecords;
 
@@ -788,100 +590,56 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // Add this method to mark students absent
-  Future<void> markStudentAbsent({
-    required String attendanceSessionId,
-    required String studentUid,
+  Future<Map<String, List<StudentAttendanceRecord>>> fetchStudentAttendanceForDateRange({
+    required List<String> studentUids,
+    required List<String> scheduleIds,
+    required DateTime start,
+    required DateTime end,
   }) async {
-    try {
-      debugPrint('[ATTENDANCE] Checking if we need to mark student $studentUid as absent for session $attendanceSessionId');
+    if (studentUids.isEmpty || scheduleIds.isEmpty) return {};
 
-      // Reference to the student document in the attendance session
-      final studentRef = _db
+    final dateStrings = <String>[];
+    for (var d = start; !d.isAfter(end); d = d.add(const Duration(days: 1))) {
+      dateStrings.add(_formatDateStr(d));
+    }
+
+    final dateChunks = _chunk(dateStrings, 30);
+    final allAttendanceDocs = <QueryDocumentSnapshot<Map<String, dynamic>>>[];
+
+    for (final chunk in dateChunks) {
+      if (chunk.isEmpty) continue;
+      final attendanceSessionsSnap = await _db
           .collection('attendance_sessions')
-          .doc(attendanceSessionId)
-          .collection('students')
-          .doc(studentUid);
-
-      // Check if document already exists
-      final docSnap = await studentRef.get();
-      if (docSnap.exists) {
-        return;
-      }
-
-      // Get student details from their account document
-      final studentDoc = await _db
-          .collection('users')
-          .doc('student')
-          .collection('accounts')
-          .doc(studentUid)
+          .where('scheduleId', whereIn: scheduleIds)
+          .where('dateStr', whereIn: chunk)
           .get();
-
-      if (!studentDoc.exists || studentDoc.data() == null) {
-        return;
-      }
-
-      // Extract required fields from student document
-      final studentData = studentDoc.data()!;
-      final firstName = _strOrNull(studentData['firstName']) ?? '';
-      final lastName = _strOrNull(studentData['lastName']) ?? '';
-      final fullName = '$firstName $lastName'.trim();
-      final studentNumber = _strOrNull(studentData['studentNumber']);
-      final academicStatus = _strOrNull(studentData['academicStatus']);
-      final studentId = _strOrNull(studentData['id']);
-      // Create the document with absent status
-      await studentRef.set({
-        'studentId': studentId,
-        'status': 'Absent',
-        'source': 'System',
-        'fullName': fullName,
-        'studentNo': studentNumber,
-        'academicStatus': academicStatus,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-    } catch (e) {
-      debugPrint('[ATTENDANCE] Error marking student as absent: $e');
+      allAttendanceDocs.addAll(attendanceSessionsSnap.docs);
     }
-  }
 
-  // Add this method to mark teachers absent
-  Future<void> markTeacherAbsent({
-    required String attendanceSessionId,
-    required String teacherId,
-    required String teacherName,
-  }) async {
-    try {
-
-      // Reference to the instructor document
-      final instructorRef = _db
-          .collection('attendance_sessions')
-          .doc(attendanceSessionId)
-          .collection('instructor')
-          .doc('main');
-
-      // Check if document already exists
-      final docSnap = await instructorRef.get();
-      if (docSnap.exists) {
-        return;
-      }
-
-      // Create the document with absent status
-      await instructorRef.set({
-        'instructorId': teacherId,
-        'status': 'Absent',
-        'source': 'System',
-        'fullName': teacherName,
-        'updatedAt': FieldValue.serverTimestamp(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-
-    } catch (e) {
-      debugPrint('[ATTENDANCE] Error marking teacher as absent: $e');
+    final results = <String, List<StudentAttendanceRecord>>{};
+    for (final studentId in studentUids) {
+      results[studentId] = [];
     }
-  }
 
+    for (final attendanceDoc in allAttendanceDocs) {
+      final studentRecordsSnap = await attendanceDoc.reference.collection('students').get();
+      for (final studentDoc in studentRecordsSnap.docs) {
+        if (results.containsKey(studentDoc.id)) {
+          final data = studentDoc.data();
+          results[studentDoc.id]!.add(StudentAttendanceRecord(
+            uid: studentDoc.id,
+            name: _strOrNull(data['fullName']) ?? 'Unknown',
+            studentNumber: _strOrNull(data['studentNo']),
+            status: _parseAttendanceStatus(data['status']),
+            firstSeen: _parseDate(data['firstSeen']),
+            lastSeen: _parseDate(data['lastSeen']),
+            source: _strOrNull(data['source']),
+          ));
+        }
+      }
+    }
+    return results;
+  }
   @override
   Future<List<Session>> getSessionsByStatus({
     required String userId,
@@ -890,7 +648,6 @@ class FirestoreScheduleService implements ScheduleService {
     required DateTime date,
   }) async {
     try {
-      // First, get all sessions for the day
       final (sessionsByDate, _) = await getSessionsForRange(
         userId: userId,
         role: role,
@@ -898,7 +655,6 @@ class FirestoreScheduleService implements ScheduleService {
         end: date,
       );
 
-      // Filter sessions by the requested status
       final allSessions = sessionsByDate[date] ?? [];
       return allSessions.where((session) => session.status == status).toList();
     } catch (e) {
@@ -930,7 +686,6 @@ class FirestoreScheduleService implements ScheduleService {
   }
 
   Future<List<Session>> _fetchIrregularStudentSchedule({required String uid, required ActiveTerm activeTerm}) async {
-    // This logic is copied from the attendance module for completeness.
     final query = _db.collectionGroup('enrolled_students').where(FieldPath.documentId, isEqualTo: uid);
     final enrolledSnap = await query.get();
     if (enrolledSnap.docs.isEmpty) return [];
@@ -965,14 +720,12 @@ class FirestoreScheduleService implements ScheduleService {
   }) async {
 
     try {
-      // Get the schedule reference - avoid collection group query that was causing issues
       final scheduleSnap = await _db.collectionGroup('schedules')
           .limit(10)
           .get();
 
       DocumentReference? scheduleRef;
 
-      // Find the schedule with matching ID
       for (final doc in scheduleSnap.docs) {
         if (doc.id == scheduleId) {
           scheduleRef = doc.reference;
@@ -984,14 +737,12 @@ class FirestoreScheduleService implements ScheduleService {
         return [];
       }
 
-      // Get enrolled students
       final enrolledStudentsSnap = await scheduleRef.collection('enrolled_students').get();
 
       if (enrolledStudentsSnap.docs.isEmpty) {
         return [];
       }
 
-      // Process enrolled students
       final students = <SectionStudent>[];
 
       for (final enrollDoc in enrolledStudentsSnap.docs) {
@@ -1004,7 +755,6 @@ class FirestoreScheduleService implements ScheduleService {
           }
 
           QuerySnapshot<Map<String, dynamic>> studentQuery;
-          // First try 'id' field
           studentQuery = await _db.collection('users')
               .doc('student')
               .collection('accounts')
@@ -1013,7 +763,6 @@ class FirestoreScheduleService implements ScheduleService {
               .get();
 
           if (studentQuery.docs.isEmpty) {
-            // Then try 'userId' field
             studentQuery = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')
@@ -1023,7 +772,6 @@ class FirestoreScheduleService implements ScheduleService {
           }
 
           if (studentQuery.docs.isEmpty) {
-            // If still not found, try direct document lookup using the enrollment doc ID
             final directLookup = await _db.collection('users')
                 .doc('student')
                 .collection('accounts')
@@ -1036,20 +784,19 @@ class FirestoreScheduleService implements ScheduleService {
                 uid: directLookup.id,
                 name: _combineName(studentData, fallback: 'Unknown Student'),
                 photoURL: _strOrNull(studentData['photoURL']),
-                studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
+                studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']),
               ));
             } else {
               debugPrint("[Roster] Student not found for ID: $studentIdField");
             }
           } else {
-            // Student found via query
             final studentDoc = studentQuery.docs.first;
             final studentData = studentDoc.data();
             students.add(SectionStudent(
               uid: studentDoc.id,
               name: _combineName(studentData, fallback: 'Unknown Student'),
               photoURL: _strOrNull(studentData['photoURL']),
-              studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']), // Add this line
+              studentNumber: _strOrNull(studentData['studentNumber'] ?? studentData['id']),
             ));
           }
         } catch (e) {
@@ -1057,7 +804,6 @@ class FirestoreScheduleService implements ScheduleService {
         }
       }
 
-      // Sort students by name
       students.sort((a, b) => a.name.compareTo(b.name));
       return students;
 
@@ -1092,7 +838,6 @@ class FirestoreScheduleService implements ScheduleService {
 
   @override
   Future<List<RoomSchedule>> fetchSchedulesForRoom({required String roomName, required DateTime forDate}) async {
-    // This logic remains the same.
     try {
       final dayKey = DateFormat('EEEE').format(forDate).toLowerCase();
 
@@ -1126,7 +871,14 @@ class FirestoreScheduleService implements ScheduleService {
     }
   }
 
-  // ============================ HELPERS (UPDATED) ============================
+
+  List<List<T>> _chunk<T>(List<T> list, int chunkSize) {
+    List<List<T>> chunks = [];
+    for (var i = 0; i < list.length; i += chunkSize) {
+      chunks.add(list.sublist(i, i + chunkSize > list.length ? list.length : i + chunkSize));
+    }
+    return chunks;
+  }
 
   String _formatDateStr(DateTime date) {
     return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
@@ -1135,18 +887,15 @@ class FirestoreScheduleService implements ScheduleService {
   DateTime? _parseDate(dynamic value) {
     if (value == null) return null;
     if (value is Timestamp) {
-      // It's a Firestore Timestamp, convert it
       return value.toDate();
     }
     if (value is String && value.isNotEmpty) {
-      // It's a String, parse it
       try {
         return DateTime.parse(value);
       } catch (e) {
         return null;
       }
     }
-    // Not a type we recognize
     return null;
   }
 
@@ -1155,19 +904,16 @@ class FirestoreScheduleService implements ScheduleService {
 
     final rawValue = statusValue.toString();
     final status = rawValue.toLowerCase().trim();
-    // First handle direct lowercase comparisons
     if (status == 'present') return AttendanceStatus.present;
     if (status == 'late') return AttendanceStatus.late;
     if (status == 'absent') return AttendanceStatus.absent;
     if (status == 'excused') return AttendanceStatus.excused;
 
-    // Then handle partial matches
     if (status.contains('present')) return AttendanceStatus.present;
     if (status.contains('late')) return AttendanceStatus.late;
     if (status.contains('absent')) return AttendanceStatus.absent;
     if (status.contains('excused')) return AttendanceStatus.excused;
 
-    // Special handling for ongoing status
     if (status == 'ongoing') {
       return AttendanceStatus.scheduled;
     }
@@ -1175,13 +921,11 @@ class FirestoreScheduleService implements ScheduleService {
   }
 
   Future<ActiveTerm?> _findActiveTerm() async {
-    // Check cache first
     const cacheKey = 'activeTerm';
     if (_termCache.containsKey(cacheKey)) {
       return _termCache[cacheKey];
     }
 
-    // Fetch from Firestore if not in cache
     final yearSnap = await _db.collection('academic_years').where('status', isEqualTo: 'Active').limit(1).get();
     if (yearSnap.docs.isEmpty) return null;
 
@@ -1202,7 +946,6 @@ class FirestoreScheduleService implements ScheduleService {
         endDate: endDate
     );
 
-    // Store in cache
     _termCache[cacheKey] = term;
     return term;
   }
@@ -1219,7 +962,6 @@ class FirestoreScheduleService implements ScheduleService {
     final startStr = (data['startTime'] ?? data['timeStart'] ?? '').toString();
     final endStr = (data['endTime'] ?? data['timeEnd'] ?? '').toString();
 
-    // Combine subject code and name
     final subjectCode = _strOrNull(data['subjectCode']);
     final subjectNameStr = _strOrNull(data['subjectName']);
     String displaySubject = subjectNameStr ?? 'No Subject';
@@ -1276,8 +1018,14 @@ class FirestoreScheduleService implements ScheduleService {
 
   int _parseTimeToMinutes(String timeStr) {
     if (timeStr.isEmpty) return 0;
-    final fmts = ['HH:mm', 'H:mm', 'hh:mm a', 'h:mm a'];
-    for (final f in fmts) { try { final dt = DateFormat(f).parse(timeStr); return dt.hour * 60 + dt.minute; } catch (_) {} }
+    // Try 12-hour formats with AM/PM first, then fall back to 24-hour formats
+    final fmts = ['h:mm a', 'hh:mm a', 'H:mm', 'HH:mm'];
+    for (final f in fmts) {
+      try {
+        final dt = DateFormat(f). parse(timeStr);
+        return dt.hour * 60 + dt.minute;
+      } catch (_) {}
+    }
     return 0;
   }
 

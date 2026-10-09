@@ -1,4 +1,3 @@
-// Service_Modules/Profile/profile_service.dart
 import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -19,8 +18,6 @@ class ProfileService {
         storage = storage ?? FirebaseStorage.instance,
         auth = auth ?? FirebaseAuth.instance;
 
-  // ---------------- Firestore refs ----------------
-
   DocumentReference<Map<String, dynamic>> _userRef({
     required String role,
     required String uid,
@@ -36,7 +33,6 @@ class ProfileService {
     return snap.data();
   }
 
-  /// Prefer studentNumber/employeeNumber; else fallback to uid.
   String? deriveStorageId({
     required String role,
     required Map<String, dynamic>? userData,
@@ -49,10 +45,6 @@ class ProfileService {
     return fallbackUid;
   }
 
-  // ---------------- Storage path helpers ----------------
-
-  /// Map your role -> folder name used in Storage.
-  /// Adjust strings here to exactly match your bucket folders.
   String _roleFolder(String role) {
     switch (role.toLowerCase().replaceAll(' ', '_')) {
       case 'student':
@@ -66,7 +58,6 @@ class ProfileService {
     }
   }
 
-  // Real-time user doc stream
   Stream<Map<String, dynamic>?> watchUser({
     required String role,
     required String uid,
@@ -93,27 +84,19 @@ class ProfileService {
   }
 
 
-  /// Folder ref: "{$role}Photo/$id"
   Reference _folderRef(String id, String role) =>
       storage.ref('${_roleFolder(role)}/$id');
 
-  /// File ref: "{$role}Photo/$id/$fileName"
   Reference _photoRef(String id, String role, String fileName) =>
       storage.ref('${_roleFolder(role)}/$id/$fileName');
 
-  // ---------------- Image pick/upload ----------------
-
-  /// Pick image from gallery (no upload).
   Future<XFile?> pickImage({int imageQuality = 60}) async {
     return _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: imageQuality,
     );
-    // Note: On iOS, consider request permissions on your app side.
   }
 
-  /// Upload to `{$role}Photo/$id/<fileName>` and return the **download URL**.
-  /// If [fileNameOverride] is null, use the original picked filename.
   Future<String> uploadAndGetUrl(
       String id,
       String role,
@@ -126,41 +109,29 @@ class ProfileService {
 
     final ref = _photoRef(id, role, fileName);
     await ref.putFile(file);
-    return await ref.getDownloadURL(); // e.g. ...?alt=media&token=...
+    return await ref.getDownloadURL();
   }
 
-  // ---------------- Legacy / fallback URL discovery ----------------
-
-  /// If Firestore has no `profileImage`, try to discover any file in "{$role}Photo/$id".
-  /// 1) listAll() the folder and return the first item's URL (if allowed by Storage rules)
-  /// 2) fallback to common names: picture / profile.jpg / profile.png
   Future<String?> getProfilePhotoUrlIfAny(String id, String role) async {
-    // Try listing folder
     try {
       final list = await _folderRef(id, role).listAll();
       if (list.items.isNotEmpty) {
         return await list.items.first.getDownloadURL();
       }
     } catch (_) {
-      // ignore; not all setups allow listAll
     }
 
-    // Try common filenames
     const guesses = <String>['picture', 'profile.jpg', 'profile.png', 'profile.jpeg'];
     for (final name in guesses) {
       try {
         final url = await _photoRef(id, role, name).getDownloadURL();
         return url;
       } catch (_) {
-        // try next
       }
     }
     return null;
   }
 
-  // ---------------- Firestore writes ----------------
-
-  /// Save the download URL to the user's doc (field: profileImage).
   Future<void> saveProfileImage({
     required String role,
     required String uid,
@@ -172,7 +143,6 @@ class ProfileService {
     });
   }
 
-  /// Update contact field.
   Future<void> updateContact({
     required String role,
     required String uid,

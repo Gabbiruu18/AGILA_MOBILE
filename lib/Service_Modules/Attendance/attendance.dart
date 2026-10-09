@@ -194,8 +194,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     final thirtyDaysAgo = today.subtract(const Duration(days: 30));
     final termStart = ctrl.state.activeTerm?.startDate ?? DateTime(2020);
     final earliestDate = termStart.isAfter(thirtyDaysAgo) ? termStart : thirtyDaysAgo;
-
-    // Check if we're viewing tomorrow's date
     final viewingTomorrow = DateTime(
         ctrl.state.anchor.year,
         ctrl.state.anchor.month,
@@ -209,14 +207,13 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     if (viewingTomorrow) {
       // If viewing tomorrow, only allow selecting tomorrow
       lastDate = tomorrow;
-      // Force initialDate to be tomorrow
       final initialDate = tomorrow;
 
       final selectedDate = await showDatePicker(
         context: context,
         initialDate: initialDate,
-        firstDate: initialDate, // Only tomorrow is selectable
-        lastDate: lastDate,     // Only tomorrow is selectable
+        firstDate: initialDate,
+        lastDate: lastDate,
         selectableDayPredicate: (day) => day.isAtSameMomentAs(tomorrow), // Extra restriction
       );
 
@@ -318,7 +315,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // First row - Present and Late
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -345,8 +341,6 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                       ),
 
                       const SizedBox(height: 8),
-
-                      // Second row - Absent and Excused
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

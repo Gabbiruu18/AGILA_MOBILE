@@ -10,7 +10,7 @@ class OpeningScreen extends StatefulWidget {
 }
 
 class OpeningScreenState extends State<OpeningScreen>
-    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   static const _assetPath = 'assets/images/agila_opening.png';
@@ -18,19 +18,10 @@ class OpeningScreenState extends State<OpeningScreen>
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
     _controller = AnimationController(vsync: this, duration: const Duration(seconds: 2));
     _fadeAnimation = Tween<double>(begin: 0, end: 1).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
     _controller.forward();
     _navigate();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-    if (state == AppLifecycleState.resumed) {
-      _navigate();
-    }
   }
 
   Future<bool> _checkFirestoreForPasscode(String uid) async {
@@ -46,7 +37,6 @@ class OpeningScreenState extends State<OpeningScreen>
         if (doc.exists && doc.data() != null) {
           final data = doc.data()!;
           if (data.containsKey('passcode') && (data['passcode'] as String).isNotEmpty) {
-            // Found a passcode, so we can quick login.
             return true;
           }
         }
@@ -68,13 +58,9 @@ class OpeningScreenState extends State<OpeningScreen>
 
     bool canQuickLogin = false;
     if (rememberMe && rememberedUid != null) {
-      // 1. Check for biometrics enabled on this device (fastest check).
       final hasBiometrics = prefs.getBool('biometric_enabled_for_uid_$rememberedUid') ?? false;
-
-      // 2. Check for a passcode. This is more reliable as it checks Firestore.
       final hasPasscode = await _checkFirestoreForPasscode(rememberedUid);
 
-      // If EITHER ONE is true, the user can use the quick login screen.
       if (hasPasscode || hasBiometrics) {
         canQuickLogin = true;
       }
@@ -95,7 +81,6 @@ class OpeningScreenState extends State<OpeningScreen>
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     _controller.dispose();
     super.dispose();
   }

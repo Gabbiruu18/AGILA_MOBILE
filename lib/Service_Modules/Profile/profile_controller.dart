@@ -1,4 +1,3 @@
-// Service_Modules/Profile/profile_controller.dart
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -15,21 +14,18 @@ class ProfileController extends ChangeNotifier {
   Map<String, dynamic>? userData;
   bool isLoading = true;
 
-  String? profileImageUrl; // Firestore URL field (e.g. 'profileImage')
-  String? storageId;       // studentNumber/employeeNumber/uid
+  String? profileImageUrl;
+  String? storageId;
   late String role;
   late String uid;
 
-  // Realtime sub
   StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userSub;
 
-  // Sync flags
-  bool _isBusy = false;            // e.g. uploading image, saving contact
-  bool _hasPendingWrites = false;  // from snapshot.metadata.hasPendingWrites
+  bool _isBusy = false;
+  bool _hasPendingWrites = false;
   bool get isSyncing => isLoading || _isBusy || _hasPendingWrites;
-  bool get isBusy => _isBusy; // ✅ NEW: expose busy state for UI
+  bool get isBusy => _isBusy;
 
-  // ----- Derived helpers -----
   String get courseAcronym => _toAcronym((userData?['courseName'] ?? '').toString());
   String get departmentAcronym =>
       _toAcronym((userData?['departmentName'] ?? userData?['department'] ?? '').toString());
@@ -63,7 +59,6 @@ class ProfileController extends ChangeNotifier {
     'department': userData?['departmentName'] ?? userData?['department'],
   };
 
-  // ----- Lifecycle -----
   Future<void> init({required String role, required String uid}) async {
     this.role = role;
     this.uid = uid;
@@ -81,7 +76,6 @@ class ProfileController extends ChangeNotifier {
       final data = snap.data();
       final id = _service.deriveStorageId(role: role, userData: data, fallbackUid: uid);
 
-      // Prefer 'profileImage' (URL-only). Support 'profile' as legacy.
       String? imgUrl = (data?['photoURL'] as String?)?.trim()
           ?? (data?['profile']      as String?)?.trim();
 
@@ -106,11 +100,9 @@ class ProfileController extends ChangeNotifier {
     _userSub?.cancel();
     super.dispose();
   }
-  // Keep legacy method signature used by UI pencil
   Future<void> pickAndUploadImage(BuildContext context) =>
       changePhotoWithConfirmation(context);
 
-  // ----- Actions -----
   Future<void> changePhotoWithConfirmation(BuildContext context) async {
     if (storageId == null) return;
 
@@ -121,7 +113,6 @@ class ProfileController extends ChangeNotifier {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        //backgroundColor: Color(0xFFFFFFFF),
         title: const Text('Use this photo?'),
         content: ClipRRect(
           borderRadius: BorderRadius.circular(12),
@@ -131,15 +122,14 @@ class ProfileController extends ChangeNotifier {
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
             style: TextButton.styleFrom(
-              foregroundColor: kAgilaBlue, // kAgilaBlue
+              foregroundColor: kAgilaBlue,
             ),
             child: const Text('Cancel'),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: FilledButton.styleFrom(
-              // fill + text color
-              backgroundColor: kAgilaGold, // kAgilaGold
+              backgroundColor: kAgilaGold,
               foregroundColor: Colors.white,
             ),
             child: const Text('Confirm'),
@@ -150,13 +140,10 @@ class ProfileController extends ChangeNotifier {
     );
     if (confirmed != true) return;
 
-    // Mark busy while uploading to Storage & writing Firestore
     _setBusy(true);
     try {
       final newUrl = await _service.uploadAndGetUrl(storageId!, role, file);
       await _service.saveProfileImage(role: role, uid: uid, url: newUrl);
-
-      // Optimistic UI
       profileImageUrl = newUrl;
       userData = {...?userData, 'photoURL': newUrl};
       notifyListeners();
@@ -228,7 +215,6 @@ class ProfileController extends ChangeNotifier {
     _setBusy(true);
     try {
       await _service.updateContact(role: role, uid: uid, contact: result);
-      // Optimistic UI; stream will also refresh
       userData = {...?userData, 'contact': result};
       notifyListeners();
     } finally {
@@ -242,7 +228,6 @@ class ProfileController extends ChangeNotifier {
     }
   }
 
-  // ----- Utils -----
   void _setBusy(bool v) {
     if (_isBusy != v) {
       _isBusy = v;

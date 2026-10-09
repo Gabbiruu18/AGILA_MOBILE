@@ -1,4 +1,4 @@
-import 'dart:async'; // Import the async library for the Timer
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:project_agila/Service_Modules/Request/request_UI.dart';
@@ -36,7 +36,7 @@ class RequestListScreen extends StatefulWidget {
 
 class _RequestListScreenState extends State<RequestListScreen> {
   late final RequestController _controller;
-  Timer? _debounce; // Add a Timer for debouncing
+  Timer? _debounce;
 
   @override
   void initState() {
@@ -51,7 +51,7 @@ class _RequestListScreenState extends State<RequestListScreen> {
 
   @override
   void dispose() {
-    _debounce?.cancel(); // Important: cancel the timer to avoid memory leaks
+    _debounce?.cancel();
     super.dispose();
   }
 
@@ -107,7 +107,6 @@ class _RequestListScreenState extends State<RequestListScreen> {
             ),
           RequestToolbar(
             onQueryChanged: (q) {
-              // Debounce logic: wait for 500ms of inactivity before searching
               if (_debounce?.isActive ?? false) _debounce!.cancel();
               _debounce = Timer(const Duration(milliseconds: 500), () {
                 _controller.setQuery(q);

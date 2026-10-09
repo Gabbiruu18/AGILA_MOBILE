@@ -18,29 +18,44 @@ class LoginScreenState extends State<LoginScreen> {
   bool _termsAccepted = false;
   bool _rememberMe = false;
   bool _isLoading = false;
+  bool _isCheckingTerms = true;
 
   static const _assetPath = 'assets/images/agila_opening.png';
 
   @override
   void initState() {
     super.initState();
-    _loadInitialState();
+    _checkTermsAndShowDialog();
   }
 
-  Future<void> _loadInitialState() async {
+  Future<void> _checkTermsAndShowDialog() async {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
+
+    final termsAccepted = prefs.getBool('termsAccepted') ?? false;
     setState(() {
-      _termsAccepted = prefs.getBool('termsAccepted') ?? false;
+      _termsAccepted = termsAccepted;
     });
 
-    if (!_termsAccepted) {
-      // Use a post-frame callback to safely show a dialog after the first build.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _showTermsDialog();
-        }
-      });
+    if (!termsAccepted) {
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const TermsDialog(),
+      );
+      final newTermsAccepted = prefs.getBool('termsAccepted') ?? false;
+      if (mounted) {
+        setState(() {
+          _termsAccepted = newTermsAccepted;
+          _isCheckingTerms = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isCheckingTerms = false;
+        });
+      }
     }
   }
 
@@ -49,9 +64,13 @@ class LoginScreenState extends State<LoginScreen> {
       context: context,
       barrierDismissible: false,
       builder: (_) => const TermsDialog(),
-    ).then((_) {
-      // When dialog is closed, reload the terms acceptance state
-      _loadInitialState();
+    ).then((_) async {
+      final prefs = await SharedPreferences.getInstance();
+      if(mounted) {
+        setState(() {
+          _termsAccepted = prefs.getBool('termsAccepted') ?? false;
+        });
+      }
     });
   }
 
@@ -66,6 +85,12 @@ class LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isCheckingTerms) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       body: Stack(
         children: [

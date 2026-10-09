@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// ========== APP BAR & TOOLBAR WIDGETS ==========
-
 class RequestScreenTitle extends StatelessWidget {
   const RequestScreenTitle({super.key});
 
@@ -161,8 +159,6 @@ class RequestFilterChips extends StatelessWidget {
   }
 }
 
-// ========== CARD & LIST ITEM WIDGETS ==========
-
 class RequestCard extends StatelessWidget {
   final String type;
   final String status;
@@ -238,7 +234,7 @@ class RequestCard extends StatelessWidget {
                   const Icon(Icons.access_time, size: 14),
                   const SizedBox(width: 2),
                   Text(
-                    _formatTimestamp(timestamp), // Use new timestamp formatter
+                    _formatTimestamp(timestamp),
                     style: const TextStyle(fontSize: 12),
                   ),
                 ],
@@ -294,7 +290,6 @@ class RequestCard extends StatelessWidget {
   }
 }
 
-/// A placeholder card to show while content is loading.
 class RequestCardSkeleton extends StatelessWidget {
   const RequestCardSkeleton({super.key});
 
@@ -335,9 +330,6 @@ class RequestCardSkeleton extends StatelessWidget {
     );
   }
 }
-
-
-// ========== CHIP & BADGE WIDGETS ==========
 
 class StatusChip extends StatelessWidget {
   final String status;
@@ -453,8 +445,6 @@ class TabItem extends StatelessWidget {
   }
 }
 
-// ========== STATE & LAYOUT WIDGETS ==========
-
 class RequestList extends StatelessWidget {
   final AsyncSnapshot<QuerySnapshot> snapshot;
   final List<DocumentSnapshot> filteredDocs;
@@ -478,11 +468,10 @@ class RequestList extends StatelessWidget {
     if (snapshot.hasError) {
       return Center(child: Text('Something went wrong: ${snapshot.error}'));
     }
-    // Show skeleton loaders when waiting for data
     if (snapshot.connectionState == ConnectionState.waiting) {
       return ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 16),
-        itemCount: 5, // Show 5 skeleton cards
+        itemCount: 5,
         itemBuilder: (context, index) => const RequestCardSkeleton(),
         separatorBuilder: (_, __) => const SizedBox(height: 10),
       );
@@ -548,12 +537,10 @@ class RequestDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // --- Start of fix ---
-    // Safely parse sender and recipient info
+
     String senderRole = data['role'] ?? '';
     String recipientRole = data['recipientRole'] ?? '';
 
-    // Fallback for older documents: Intelligently find roles from keys
     if (senderRole.isEmpty) {
       final fromKey = data.keys.firstWhere((k) => k.startsWith('from') && k.endsWith('Id'), orElse: () => '');
       if (fromKey.isNotEmpty) {
@@ -572,7 +559,6 @@ class RequestDetailsSheet extends StatelessWidget {
 
     final fromName = data['from${senderRoleKey}Name'] ?? 'Unknown';
     final toName = data['to${recipientRoleKey}Name'] ?? '—';
-    // --- End of fix ---
 
     final type = (data['type'] ?? 'Unknown').toString();
     final status = (data['status'] ?? 'Pending').toString();
@@ -725,8 +711,6 @@ class RequestDetailsSheet extends StatelessWidget {
   }
 }
 
-// ========== DISMISSIBLE BACKGROUNDS ==========
-
 Widget slideApprove() => Container(
   decoration: BoxDecoration(
     color: const Color(0xFFE6F6EA),
@@ -752,7 +736,6 @@ Widget slideReject() => Container(
   ),
 );
 
-/// A dialog that prompts the user for remarks for a decision.
 class DecisionRemarksDialog extends StatefulWidget {
   final bool isApproved;
   const DecisionRemarksDialog({super.key, required this.isApproved});
@@ -791,9 +774,7 @@ class _DecisionRemarksDialogState extends State<DecisionRemarksDialog> {
   }
 }
 
-// ========== HELPERS ==========
 
-/// Formats a timestamp into a more readable, relative format.
 String _formatTimestamp(DateTime ts) {
   final now = DateTime.now();
   final today = DateTime(now.year, now.month, now.day);
@@ -801,15 +782,13 @@ String _formatTimestamp(DateTime ts) {
   final date = DateTime(ts.year, ts.month, ts.day);
 
   if (date == today) {
-    return DateFormat.jm().format(ts); // '4:30 PM'
+    return DateFormat.jm().format(ts);
   }
   if (date == yesterday) {
     return 'Yesterday';
   }
-  // If within the last week, show weekday
   if (now.difference(ts).inDays < 7) {
-    return DateFormat.EEEE().format(ts); // 'Tuesday'
+    return DateFormat.EEEE().format(ts);
   }
-  // Otherwise, show the date
-  return DateFormat.yMMMd().format(ts); // 'Sep 21, 2025'
+  return DateFormat.yMMMd().format(ts);
 }
